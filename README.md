@@ -18,35 +18,26 @@ All analyses were performed on ~6,000 person-nights from the **Human Phenotype P
 ## 🗂 Repository Structure  
 
 ```markdown
-project_root/
+CAUSAL_FRAMEWORK/
 │
-├── src/                         # Main source code
-│   ├── data_utils.py            # Data loading & preprocessing helpers
-│   ├── models.py                # Model definitions or ML workflows
-│   ├── analysis.py              # Core analysis functions
-│   ├── plotting.py              # Plotting and figure generation
-│   └── __init__.py
+├── catboost_info/                 # CatBoost metadata (auto-generated)
+├── data/                          # Place your input dataset(s) here
 │
-├── notebooks/                   # Jupyter notebooks for step-by-step workflow
-│   ├── 01_data_preprocessing.ipynb
-│   ├── 02_model_training.ipynb
-│   ├── 03_effect_estimation.ipynb
-│   └── 04_figure_generation.ipynb
+├── experiment/                    # Experiment outputs (plots, logs, dataframes)
+│   ├── results/
+│   │   ├── charts/                # Auto-generated ATE plots
+│   │   ├── dataframes/            # ASMD & ATE tables
+│   │   └── experiment_summaries.csv
 │
-├── configs/                     # Configuration files for experiments
-│   ├── main_config.yaml
-│   └── hyperparameters.yaml
+├── helpers/                       # Core causal framework code
+│   ├── helpers.py                 # run_experiment(), plotting utilities
+│   ├── ipw.py                     # IPW trimming, weighting, bootstrap ATE
+│   ├── propensity.py              # Propensity score estimation & SHAP
+│   └── variables.py               # Configuration: exposures, outcomes, confounders
 │
-├── results/                     # Outputs: figures, tables, logs
-│   ├── figures/
-│   ├── tables/
-│   └── diagnostics/
+├── outputs/                       # (optional) additional storage
+├── template.ipynb                 # Notebook template for running experiments
 │
-├── data/                        # Raw or processed data (usually ignored in .gitignore)
-│   └── README.md                # Instructions for obtaining data
-│
-├── environment.yml              # Conda environment configuration
-├── requirements.txt             # pip dependencies
 ├── LICENSE
 └── README.md
 ```
