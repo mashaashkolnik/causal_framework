@@ -205,3 +205,19 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# ignore all upd* folders
+upd*/
+/upd*/
+
+# ignore catboost metadata folder(s)
+catboost*/
+
+# ignore data folder
+data/
+
+# ignore experiment outputs folder
+experiment/
+
+# system files
+.DS_Store
