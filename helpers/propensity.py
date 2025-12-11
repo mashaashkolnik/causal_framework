@@ -73,6 +73,23 @@ def treated_gb(
     gender_median = median[0] if gender == 0 else median[1]
     return value >= gender_median
 
+def treated_extreme(
+    value: Optional[float],
+    upper_left: float,
+    lower_right: float,
+) -> Optional[bool]:
+    """Assign treatment based on a global median threshold
+    Returns:
+        True if value >= median, False if less, or None if value is None.
+    """
+    if value is None:
+        return None
+    elif value <= upper_left:
+        return False
+    elif value >= lower_right:
+        return True
+    return None
+
 
 def assign_treatment_values(
     df: pd.DataFrame,
@@ -80,7 +97,9 @@ def assign_treatment_values(
     target: str,
     alpha: float = 0.01,
     method: str = "median",
-    cutoff_values: Optional[Tuple[float, float]] = None,
+    kwargs : Optional[Dict[str, Any]] = None,
+    #cutoff_values: Optional[Tuple[float, float]] = None,
+    #verbose : bool = True,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Assign binary treatment based on exposure and trimming rules
 
@@ -89,8 +108,13 @@ def assign_treatment_values(
         exposure: Name of day-specific exposure
         target: Name of the binary treatment column to create
         alpha: Two-sided trimming level on the baseline exposure. If 0, no trimming
-        method: Treatment definition; either ``"median"`` or ``"gb"``
-        cutoff_values: Optional (low, high) bounds for the day-specific exposure
+        method: Supported methods:
+            "median"
+            "gb"
+            "quantile"
+            "rdi"
+        #cutoff_values: Optional (low, high) bounds for the day-specific exposure
+        kwargs: Optional
 
     Returns:
         A tuple of:
@@ -99,6 +123,10 @@ def assign_treatment_values(
     """
     exposure_baseline = exposure.split("_target_day")[0]
     low, high = np.min(df[exposure_baseline]), np.max(df[exposure_baseline])
+    
+    stats = f"min={np.min(df[exposure])}; max={np.max(df[exposure])}"
+    sns.histplot(df[exposure].dropna())
+    plt.show()
 
     if alpha:
         if df[exposure_baseline].isna().sum() > 0:
@@ -109,26 +137,46 @@ def assign_treatment_values(
         )
         df = df[(df[exposure_baseline] >= low) & (df[exposure_baseline] <= high)]
     baseline_median = df[exposure_baseline].median()
+    
+    print(kwargs['cutoff_values'])
+    if kwargs['cutoff_values']:
+            low, high = kwargs['cutoff_values']
+            df = df[(df[exposure] >= low) & (df[exposure] <= high)]
 
     if method == "median":
-        if cutoff_values:
-            low, high = cutoff_values
-            df = df[(df[exposure] >= low) & (df[exposure] <= high)]
         baseline_median = df[exposure_baseline].median()
         df[target] = [treated(value, baseline_median) for value in df[exposure]]
     elif method == "gb":
-        if cutoff_values:
-            low, high = cutoff_values
-            df = df[(df[exposure] >= low) & (df[exposure] <= high)]
         baseline_median = df.groupby("gender").median()[exposure_baseline]
         f_median, m_median = baseline_median[0], baseline_median[1]
         df[target] = [
             treated_gb(df[exposure][idx], df["gender"][idx], [f_median, m_median])
             for idx in df.index
         ]
+    elif method == "rdi":
+        #baseline_median = df.groupby("gender").median()[exposure_baseline]
+        f_median, m_median = kwargs['rdi_values']
+        df[target] = [
+            treated_gb(df[exposure][idx], df["gender"][idx], [f_median, m_median])
+            for idx in df.index
+        ]
+    elif method == 'quantile':
+        q = kwargs['q']
+        upper_left, lower_right = np.quantile(df[exposure_baseline], [q, 1-q])
+        df[target] = [
+            treated_extreme(df[exposure][idx], upper_left, lower_right)
+            for idx in df.index
+        ]
 
+    print(f'n={len(df)}\t{stats}', end='\t')
     df = df.dropna(subset=[target])
-    kwargs = {
+    
+    new_stats = f"min={np.min(df[exposure])}; max={np.max(df[exposure])}"
+    print(f'after cutoff n={len(df)};\t{new_stats}')
+    sns.histplot(df[exposure].dropna())
+    plt.show()
+    
+    output = {
         "exposure": exposure,
         "exposure_baseline": exposure_baseline,
         "low": np.min(df[exposure]),
@@ -137,7 +185,7 @@ def assign_treatment_values(
         #'custom_median' : custom_median,
         "alpha": alpha,
     }
-    return df, kwargs
+    return df, output
 
 
 ###################################    PROPENSITY MODEL TRAINING    ###################################
@@ -402,7 +450,8 @@ def get_propensity_scores(
     variables: Mapping[str, Any],
     file: str | Path,
     method: str = "median",
-    cutoff_values: Optional[Tuple[float, float]] = None,
+    kwargs_assignment : Optional[Dict[str, Any]] = None,
+    #cutoff_values: Optional[Tuple[float, float]] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any], pd.DataFrame, Any]:
     """Full pipeline: load data, assign treatment, train PS model, compute SHAP.
 
@@ -428,7 +477,8 @@ def get_propensity_scores(
         variables["target"],
         alpha=config["alpha"],
         method=method,
-        cutoff_values=cutoff_values,
+        kwargs=kwargs_assignment,
+        #cutoff_values=cutoff_values,
     )
     df, X, y, X_train, y_train, X_test, y_test, cb, shap_values = train_ps(
         df,

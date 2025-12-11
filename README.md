@@ -1,5 +1,7 @@
 # Daily dietary choices acutely shape next-night sleep architecture: a target-trial emulation in a 6,000 person-nights cohort
 
+<div style="border-bottom:1px solid #ccc; margin:20px 0;"></div>
+
 ## Overview
 This repository contains all code used to generate the results, figures, and supplementary analyses for our study on **quasi-causal effects of daily nutritional variation on next-night sleep physiology**.  
 The workflow implements a modern target-trial emulation framework, including:
@@ -13,7 +15,7 @@ The workflow implements a modern target-trial emulation framework, including:
 
 All analyses were performed on ~6,000 person-nights from the **Human Phenotype Project (HPP)**.
 
----
+<div style="border-bottom:1px solid #ccc; margin:20px 0;"></div>
 
 ## 🗂 Repository Structure  
 
@@ -42,7 +44,8 @@ CAUSAL_FRAMEWORK/
 └── README.md
 ```
 
----
+<div style="border-bottom:1px solid #ccc; margin:20px 0;"></div>
 
+## Setup Guide
 
 
