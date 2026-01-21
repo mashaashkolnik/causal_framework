@@ -1,0 +1,63 @@
+Variable,Overall,Male,Female
+age,52.68 ± 7.91,52.06 ± 7.95,53.26 ± 7.84
+bmi,25.99 ± 4.05,26.56 ± 3.79,25.45 ± 4.22
+protein_g,79.75 ± 38.27,89.64 ± 40.74,70.39 ± 33.16
+fat_g,77.38 ± 38.00,84.83 ± 40.38,70.32 ± 34.15
+carbs_g,200.22 ± 100.46,216.77 ± 103.26,184.55 ± 95.14
+sugars_g,71.33 ± 42.74,75.15 ± 45.96,67.71 ± 39.12
+fiber_g,21.71 ± 12.32,23.04 ± 13.20,20.45 ± 11.29
+sat_fat_g,23.27 ± 13.81,25.40 ± 14.84,21.25 ± 12.42
+hour_first_meal,7.06 ± 2.45,7.06 ± 2.61,7.06 ± 2.29
+hour_last_meal,17.86 ± 2.26,17.99 ± 2.33,17.75 ± 2.19
+night_calories_pct,35.76 ± 21.13,37.24 ± 21.20,34.36 ± 20.96
+last_meal_calories,498.66 ± 405.60,560.31 ± 433.15,440.30 ± 368.36
+last_meal_calories_pct,28.37 ± 20.11,29.19 ± 20.24,27.59 ± 19.96
+unique_foods_count,12.76 ± 5.09,12.60 ± 5.28,12.91 ± 4.90
+unique_plant_based_foods_count,5.35 ± 3.52,5.14 ± 3.57,5.55 ± 3.46
+whole_foods_categories_energy,967.42 ± 509.03,1049.86 ± 548.98,889.36 ± 454.60
+plant_based_whole_foods_categories_energy,526.04 ± 405.43,558.76 ± 437.06,495.06 ± 370.45
+whole_dairy_categories_energy,141.85 ± 188.41,138.49 ± 191.21,145.02 ± 185.69
+processed_categories_energy,367.15 ± 367.19,424.52 ± 407.95,312.83 ± 314.48
+total_energy_kcal,1815.23 ± 703.34,1996.75 ± 730.86,1643.37 ± 629.89
+whole_food_categories_ratio,0.55 ± 0.22,0.54 ± 0.22,0.56 ± 0.22
+processed_categories_ratio,0.20 ± 0.17,0.21 ± 0.18,0.19 ± 0.17
+prot_pct,0.18 ± 0.06,0.18 ± 0.07,0.17 ± 0.06
+fat_pct,0.38 ± 0.11,0.38 ± 0.10,0.39 ± 0.11
+carb_pct,0.44 ± 0.13,0.43 ± 0.13,0.45 ± 0.13
+sleep_hour,20.10 ± 2.97,20.10 ± 3.22,20.09 ± 2.70
+percent_of_deep_sleep_time,17.56 ± 5.11,17.41 ± 5.17,17.71 ± 5.05
+percent_of_rem_sleep_time,23.96 ± 7.29,23.35 ± 7.24,24.53 ± 7.28
+percent_of_light_sleep_time,58.48 ± 10.24,59.24 ± 10.02,57.76 ± 10.40
+number_of_wakes,6.51 ± 3.99,6.92 ± 4.24,6.13 ± 3.69
+heart_rate_mean_during_sleep,59.70 ± 7.93,57.72 ± 7.66,61.58 ± 7.73
+sleep_efficiency,88.82 ± 5.20,88.24 ± 5.42,89.38 ± 4.93
+total_sleep_time_minutes,378.26 ± 59.95,370.63 ± 58.73,385.49 ± 60.21
+sleep_latency_minutes,14.78 ± 7.13,14.93 ± 7.16,14.64 ± 7.11
+total_wake_time_after_sleep_onset_minutes,27.39 ± 22.10,29.12 ± 23.33,25.76 ± 20.75
+Spinal pain,0.18 ± 0.39,0.19 ± 0.39,0.18 ± 0.38
+Haemorrhoids,0.20 ± 0.40,0.20 ± 0.40,0.20 ± 0.40
+Attention deficit hyperactivity disorder,0.15 ± 0.36,0.15 ± 0.36,0.15 ± 0.36
+Essential hypertension,0.11 ± 0.31,0.13 ± 0.33,0.09 ± 0.29
+hypothyroidism,0.06 ± 0.25,0.02 ± 0.14,0.11 ± 0.31
+Obesity,0.05 ± 0.21,0.04 ± 0.20,0.05 ± 0.23
+Migraine,0.05 ± 0.23,0.03 ± 0.17,0.08 ± 0.27
+Anxiety or fear-related disorders,0.03 ± 0.17,0.02 ± 0.15,0.04 ± 0.19
+Depressive disorders,0.03 ± 0.17,0.02 ± 0.14,0.04 ± 0.18
+Obstructive sleep apnoea,0.03 ± 0.16,0.04 ± 0.20,0.01 ± 0.12
+Iron Deficiency Anemia,0.02 ± 0.15,0.01 ± 0.08,0.04 ± 0.19
+Atopic eczema,0.03 ± 0.17,0.03 ± 0.17,0.03 ± 0.18
+Polycystic ovary syndrome,0.02 ± 0.13,0.00 ± 0.00,0.03 ± 0.18
+"Heart valve diseases, unspecified",0.01 ± 0.10,0.01 ± 0.10,0.01 ± 0.09
+Endometriosis,0.01 ± 0.11,0.00 ± 0.00,0.02 ± 0.15
+Atrial fibrillation,0.00 ± 0.04,0.00 ± 0.05,0.00 ± 0.02
+Central sleep apnoeas,0.00 ± 0.02,0.00 ± 0.03,0.00 ± 0.00
+Chronic insomnia,0.00 ± 0.00,0.00 ± 0.00,0.00 ± 0.00
+Restless legs syndrome,0.00 ± 0.01,0.00 ± 0.00,0.00 ± 0.02
+Generalised anxiety disorder,0.00 ± 0.01,0.00 ± 0.02,0.00 ± 0.00
+Bipolar or related disorders,0.00 ± 0.00,0.00 ± 0.00,0.00 ± 0.00
+Post traumatic stress disorder,0.00 ± 0.02,0.00 ± 0.02,0.00 ± 0.02
+Chronic obstructive pulmonary disease,0.00 ± 0.05,0.00 ± 0.05,0.00 ± 0.05
+Asthma,0.05 ± 0.22,0.05 ± 0.22,0.05 ± 0.22
+Gastro-oesophageal reflux disease,0.01 ± 0.10,0.01 ± 0.11,0.01 ± 0.10
+Chronic widespread pain,0.01 ± 0.11,0.01 ± 0.07,0.02 ± 0.13
+Osteoarthritis,0.03 ± 0.17,0.02 ± 0.14,0.04 ± 0.20

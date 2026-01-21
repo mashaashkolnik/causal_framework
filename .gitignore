@@ -214,7 +214,7 @@ upd*/
 catboost*/
 
 # ignore data folder
-data/
+data*
 
 # ignore experiment outputs folder
 experiment/

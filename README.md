@@ -17,28 +17,34 @@ All analyses were performed on ~6,000 person-nights from the **Human Phenotype P
 
 <div style="border-bottom:1px solid #ccc; margin:20px 0;"></div>
 
+## Usage
+
+
+
 ## 🗂 Repository Structure  
 
 ```markdown
 CAUSAL_FRAMEWORK/
 │
-├── catboost_info/                 # CatBoost metadata (auto-generated)
-├── data/                          # Place your input dataset(s) here
-│
-├── experiment/                    # Experiment outputs (plots, logs, dataframes)
-│   ├── results/
-│   │   ├── charts/                # Auto-generated ATE plots
-│   │   ├── dataframes/            # ASMD & ATE tables
-│   │   └── experiment_summaries.csv
-│
-├── helpers/                       # Core causal framework code
+├── scripts/                       # Experiment outputs (plots, logs, dataframes)
 │   ├── helpers.py                 # run_experiment(), plotting utilities
 │   ├── ipw.py                     # IPW trimming, weighting, bootstrap ATE
-│   ├── propensity.py              # Propensity score estimation & SHAP
+│   ├── matching.py                # Propensity score estimation & SHAP
+│   └── plot.py                    # Configuration: exposures, outcomes, confounders
+│
+├── variables/                     # Core causal framework code
+│   ├── configs.py                 # run_experiment(), plotting utilities
+│   ├── labels.py                  # IPW trimming, weighting, bootstrap ATE
 │   └── variables.py               # Configuration: exposures, outcomes, confounders
 │
-├── outputs/                       # (optional) additional storage
-├── template.ipynb                 # Notebook template for running experiments
+├── paper_files/                   # (optional) additional storage
+├── results/                       # (optional) additional storage
+├── results_matching/              # (optional) additional storage
+|
+├── baseline_characteristics.ipynb # Notebook template for running experiments
+├── causal_engine.ipynb            # Notebook template for running experiments
+├── matching.ipynb                 # Notebook template for running experiments
+├── results_aggregation.ipynb      # Notebook template for running experiments
 │
 ├── LICENSE
 └── README.md
@@ -47,5 +53,5 @@ CAUSAL_FRAMEWORK/
 <div style="border-bottom:1px solid #ccc; margin:20px 0;"></div>
 
 ## Setup Guide
-
+ 
 
