@@ -1,9 +1,9 @@
-# Daily dietary choices acutely shape next-night sleep architecture: a target-trial emulation in a 6,000 person-nights cohort
+# Day-to-day dietary variation shapes overnight sleep physiology: a target-trial emulation in 4.8 thousand person-nights
 
 <div style="border-bottom:1px solid #ccc; margin:20px 0;"></div>
 
 ## Overview
-This repository contains all code used to generate the results, figures, and supplementary analyses for our study on **quasi-causal effects of daily nutritional variation on next-night sleep physiology**.  
+This repository contains all code used to generate the results, figures, and supplementary analyses for our study on **effects of daily nutritional variation on next-night sleep physiology**.  
 The workflow implements a modern target-trial emulation framework, including:
 
 - Machine-learning propensity score estimation (CatBoost)
@@ -13,12 +13,11 @@ The workflow implements a modern target-trial emulation framework, including:
 - Diagnostics (ASMD balance, overlap, PS calibration)
 - Effect estimation across 15 objective sleep outcomes
 
-All analyses were performed on ~6,000 person-nights from the **Human Phenotype Project (HPP)**.
+All analyses were performed on ~4,800 person-nights from the **Human Phenotype Project (HPP)**.
 
 <div style="border-bottom:1px solid #ccc; margin:20px 0;"></div>
 
 ## Usage
-
 
 
 ## 🗂 Repository Structure  
