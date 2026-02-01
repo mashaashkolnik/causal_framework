@@ -24,6 +24,8 @@ The analytic design emulates a **day-level target trial**, estimating the effect
 - Balance diagnostics (ASMD with prespecified thresholds)
 - Negative and positive controls
 
+![Alt Text](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExb2RsbzFrOHhzdzJ4Nm9pd2kzaTh1NjFpb2tpdDhlaWdsM3RoMHhocCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/4ah0igooeeQYQNifeE/giphy.gif)
+
 Outcomes span sleep duration, sleep-stage composition (deep/REM/light), continuity metrics, and nocturnal autonomic physiology (mean heart rate).
 
 ---
@@ -33,25 +35,25 @@ Outcomes span sleep duration, sleep-stage composition (deep/REM/light), continui
 ```text
 CAUSAL_FRAMEWORK/
 │
-├── scripts/                       # Core analysis logic
+├── scripts/                      
 │   ├── helpers.py                 # Experiment runner, utilities
 │   ├── ipw.py                     # Trimming, weighting, bootstrap ATEs
 │   ├── matching.py                # Propensity-score models & SHAP
 │   └── plot.py                    # Figure generation
 │
-├── variables/                     # Exposure & confounder definitions
+├── variables/                     
 │   ├── configs.py                 # Global experiment configuration
 │   ├── labels.py                  # Human-readable variable labels
 │   └── variables.py               # Exposure, outcome, confounder lists
 │
 ├── baseline_characteristics.ipynb # Descriptive cohort statistics
 ├── causal_engine.ipynb            # Main causal pipeline
-├── matching.ipynb                 # PS diagnostics & overlap checks
+├── matching.ipynb                 # Supplementary analysis
 ├── results_aggregation.ipynb      # Result collation for figures/tables
 │
-├── paper_files/                   # (optional) manuscript assets
-├── results/                       # (optional) generated outputs
-├── results_matching/              # (optional) PS diagnostics
+├── paper_files/                   # Manuscript assets
+├── results/                       # Outputs
+├── results_matching/              # Supplementary outputs
 │
 ├── LICENSE
 └── README.md
