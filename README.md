@@ -24,8 +24,6 @@ The analytic design emulates a **day-level target trial**, estimating the effect
 - Balance diagnostics (ASMD with prespecified thresholds)
 - Negative and positive controls
 
-![Alt Text](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExb2RsbzFrOHhzdzJ4Nm9pd2kzaTh1NjFpb2tpdDhlaWdsM3RoMHhocCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/4ah0igooeeQYQNifeE/giphy.gif)
-
 Outcomes span sleep duration, sleep-stage composition (deep/REM/light), continuity metrics, and nocturnal autonomic physiology (mean heart rate).
 
 ---

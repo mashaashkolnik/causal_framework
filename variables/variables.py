@@ -154,7 +154,7 @@ EXPOSURES_SHORTLISTED = {
 EXPOSURES = {
     # SUGAR
     # ---------------- DIET COMPOSITION ----------------
-    "hours_since_last_caffeine_target_day" : {'cutoff' : [0, 16], 'method' : 'median',},
+    #"hours_since_last_caffeine_target_day" : {'cutoff' : [0, 16], 'method' : 'median',},
     
     "plant_based_whole_foods_ratio_target_day" : {'cutoff' : None, 'method' : 'median',},
     #"furits_and_veggies_energy_ratio_target_day" : {'cutoff' : None, 'method' : 'median',},
