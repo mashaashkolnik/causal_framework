@@ -1,19 +1,12 @@
 labels_dict = {
-    'composite_sleep_quality_target_day' : 'Composite Sleep Quality',
-    'sleep_quality_continuity_target_day' : 'Sleep Quality Continuity',
-    'sleep_quality_architecture_target_day': 'Sleep Quality Architecture',
-    'sleep_latency_minutes_target_day' : 'Sleep Onset Latency', 
-    'sleep_efficiency_target_day' : 'Sleep Efficiency',
-    'total_wake_time_after_sleep_onset_minutes_target_day' : 'Wake After Sleep Onset',
-    'total_arousal_sleep_time_target_day' : 'Arousals Sleep Time',
-    'number_of_wakes_target_day' : 'Number of wakes',
+    'total_sleep_time_minutes_target_day': 'Total Sleep Time',
     'percent_of_deep_sleep_time_target_day' : 'Deep Sleep %',
     'percent_of_rem_sleep_time_target_day' : 'REM Sleep %',
     'percent_of_light_sleep_time_target_day' : 'Light Sleep %',
-    'total_deep_sleep_time_minutes_target_day': 'Deep Sleep Time',
-    'total_rem_sleep_time_minutes_target_day': 'REM Sleep Time',
-    'total_sleep_time_minutes_target_day': 'Total Sleep Time',
+    'sleep_efficiency_target_day' : 'Sleep Efficiency',
+    'sleep_latency_minutes_target_day' : 'Sleep Onset Latency', 
     'heart_rate_mean_during_sleep_target_day': 'Mean Heart Rate',
+    'total_wake_time_after_sleep_onset_minutes_target_day' : 'Wake After Sleep Onset',
 }
 
 annotation_dict = {
@@ -109,37 +102,43 @@ diet_definitions = {
 diet_full_names_mapping = {
     'hours_to_sleep' : 'Earlier\nDinner',
     'eating_window_h' : 'Longer\nEating\nWindow',
-    'night_calories_pct' : 'Heavy\nEvening\nMeal',
+    'night_calories_pct' : 'High-Calorie\nEvening\nMeal',
     
     'fat_pct' : 'Higher Fat Consumption (% of Total Energy Intake)',
     'carb_pct': 'Higher Carbs Consumption (% of Total Energy Intake)',
     'prot_pct': 'Higher Protein Consumption (% of Total Energy Intake)',
     
-    'whole_food_categories_ratio' : 'Higher whole foods Consumption (% of Total Energy Intake)',
+    'whole_food_categories_ratio' : 'Higher Whole Foods Consumption',
     'fish_meat_eggs_categories_ratio' : 'Animal\nFoods',
-    'whole_dairy_categories_ratio' : 'Higher Dairy Consumption (% of Total Energy Intake)',
-    'plant_based_whole_foods_ratio' : 'Whole\nPlant',
-    'processed_categories_ratio' : 'Processed\nFood',
+    'whole_dairy_categories_ratio' : 'Higher Dairy Consumption',
+    'plant_based_whole_foods_ratio' : 'Higher\nPlant\nConsumption',
+    #'processed_categories_ratio' : 'Processed\nFood',
     'fiber_g' : 'Fiber',
     
-    'unique_plant_based_foods_count' : 'High\nPlant\nDiversity',
+    'animal_based_whole_foods_ratio' : 'Higher Animal-Based Foods Consumption',
+    'meat_and_poultry_energy_ratio' : 'Higher Meat and Poultry Consumption',
+    'furits_and_veggies_energy_ratio' : 'Higher Fruits and Veggies Consumption',
+    
+    'processed_categories_ratio' : 'Higher Processed Food Consumption',
+    
+    'unique_plant_based_foods_count' : 'Higher\nPlant\nDiversity',
     'fiber_density_energy' : 'Fiber\nDensity',
     
     'caffeine_late_mg' : 'Late\nCaffeine',
     
-    'magnesium_mg' : 'Mg',
-    'vitamin_b12_ug' : 'B12',
-    'calcium_mg' : 'Higher Calcium Consumption (mg)',
-    'zinc_mg' : 'Higher Zinc Consumption (mg)',
-    'sugars_g': 'Higher Total Sugars Consumption (g)',
-    'vitamin_e': 'Higher Vitamin E Consumption (mg)',
-    'vitamin_d_ug' : 'Higher Vitamin D Consumption (ug)',
-    'folate' : 'Higher Folate Consumption',
-    'sat_fat_g': 'Higher Saturated Fat Consumption (g)',
-    'omega3_total_g' : 'Higher Omega-3 Consumption (g)',
+    'magnesium_mg' : 'Higher Magnesium Consumption',
+    'vitamin_b12_ug' : 'Higher B12 Consumption',
+    'calcium_mg' : 'Higher Calcium Consumption',
+    'zinc_mg' : 'Higher Zinc Consumption',
+    'sugars_g': 'Higher Total Sugars Consumption',
+    'vitamin_e': 'Higher Vitamin E Consumption',
+    'vitamin_d_ug' : 'Higher Vitamin D Consumption',
+    'folate' : 'Higher Folic Acid Consumption',
+    'sat_fat_g': 'Higher Saturated Fat Consumption',
+    'omega3_total_g' : 'Higher Omega-3 Consumption',
     
-    'vitamin_b6_mg' : 'B6',
-    'vitamin_c' : 'Vit C',
+    'vitamin_b6_mg' : 'Higher B6 Consumption',
+    'vitamin_c' : 'Higher Vitamin C Consumption',
 }
 
 rdis = {

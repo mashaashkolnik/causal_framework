@@ -529,7 +529,7 @@ def heatmap_effects_generic(
     plt.tight_layout()
     plt.show()
     
-    
+
 def plot_outcome_effects_panels_significant(
     dfs: Union[pd.DataFrame, List[pd.DataFrame]],
     df_labels: Optional[Sequence[str]] = None,
@@ -737,11 +737,11 @@ def plot_outcome_effects_panels_significant(
                 )
 
         # cosmetics
-        ax.set_title(raw_label, fontsize=14, pad=10)
-        ax.set_xlabel(x_label, fontsize=12)
+        ax.set_title(raw_label, fontsize=p_fontsize, pad=10)
+        ax.set_xlabel(x_label, fontsize=p_fontsize)
 
         ax.set_yticks(y)
-        ax.set_yticklabels(ylabels, fontsize=12)
+        ax.set_yticklabels(ylabels, fontsize=p_fontsize)
 
         ax.set_ylim(-0.5, m - 1 + 0.5)
         ax.margins(y=0.02)
@@ -750,7 +750,7 @@ def plot_outcome_effects_panels_significant(
         xmin, xmax = ax.get_xlim()
         xticks = ax.get_xticks()
         ax.set_xticks(xticks)
-        ax.set_xticklabels([("" if (t < xmin or t > xmax) else f"{t:g}") for t in xticks])
+        ax.set_xticklabels([("" if (t < xmin or t > xmax) else f"{t:g}") for t in xticks], fontsize=p_fontsize)
 
         ax.invert_yaxis()
 

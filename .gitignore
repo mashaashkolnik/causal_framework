@@ -215,6 +215,7 @@ catboost*/
 
 # ignore data folder
 data*
+results_matching*
 
 # ignore experiment outputs folder
 experiment/
