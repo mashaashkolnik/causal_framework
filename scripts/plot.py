@@ -978,3 +978,423 @@ def plot_outcome_effects_panels(
 
     fig.tight_layout()
     return fig, ax
+
+def matching_plot_error_bars(
+    df,
+    treated_title: str,
+    dir: str,
+    experiment_id=None,
+    target_title: str = "Treatment",
+    alpha: float = 0.05,
+    figsize=(8, 8),
+    out_dir=None,
+    *,
+    labels_dict=None,
+    diet_short_names_mapping=None,
+    outcome_col: str = "outcome",
+    xlim=None,
+    show_annotations: bool = True,
+    text_above_offset: float = 0.28,
+):
+    """
+    Publication-ready forest plot for matching results (ATE + CI + BH-adjusted p).
+
+    Supports either absolute effects or percent effects.
+    """
+
+    df = df.copy()
+    labels_dict = {} if labels_dict is None else dict(labels_dict)
+    diet_short_names_mapping = {} if diet_short_names_mapping is None else dict(diet_short_names_mapping)
+
+    # ------------------------------------------------------------------
+    # Detect effect mode
+    # ------------------------------------------------------------------
+    has_pct = all(c in df.columns for c in ["ATE_pct", "CI_low_pct", "CI_high_pct", "p_value_pct"])
+    has_abs = all(c in df.columns for c in ["ATE", "CI_low", "CI_high", "p_value"])
+
+    if not (has_pct or has_abs):
+        raise KeyError(
+            "df must contain either "
+            "['ATE_pct','CI_low_pct','CI_high_pct','p_value_pct'] "
+            "or ['ATE','CI_low','CI_high','p_value']"
+        )
+
+    if has_pct:
+        eff_col, lo_col, hi_col, p_col = "ATE_pct", "CI_low_pct", "CI_high_pct", "p_value_pct"
+        x_label = "Effect (% difference vs matched controls)"
+        plot_mode = "pct"
+    else:
+        eff_col, lo_col, hi_col, p_col = "ATE", "CI_low", "CI_high", "p_value"
+        x_label = "Effect (absolute difference)"
+        plot_mode = "abs"
+
+    # ------------------------------------------------------------------
+    # Optional control mean (for cross-annotating abs <-> %)
+    # ------------------------------------------------------------------
+    control_mean_candidates = [
+        "control_mean", "mean_control", "matched_control_mean",
+        "control_mean_matched", "y0_mean", "outcome_mean_control",
+        "ref_control_mean",
+    ]
+    control_mean_col = next((c for c in control_mean_candidates if c in df.columns), None)
+
+    df["ATE_abs_for_annot"] = np.nan
+    df["Effect_pct_for_annot"] = np.nan
+
+    if plot_mode == "abs":
+        df["ATE_abs_for_annot"] = df["ATE"].astype(float)
+        if control_mean_col is not None:
+            denom = df[control_mean_col].astype(float)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                df["Effect_pct_for_annot"] = 100.0 * df["ATE_abs_for_annot"] / denom
+    else:
+        df["Effect_pct_for_annot"] = df["ATE_pct"].astype(float)
+        if control_mean_col is not None:
+            denom = df[control_mean_col].astype(float)
+            df["ATE_abs_for_annot"] = (df["Effect_pct_for_annot"] / 100.0) * denom
+
+    # ------------------------------------------------------------------
+    # BH correction
+    # ------------------------------------------------------------------
+    raw_p = df[p_col].to_numpy(dtype=float)
+    adj_p = np.full_like(raw_p, np.nan, dtype=float)
+
+    ok = np.isfinite(raw_p)
+    if ok.any():
+        adj_p[ok] = multipletests(
+            raw_p[ok],
+            alpha=alpha,
+            method="fdr_bh",
+            is_sorted=False,
+        )[1]
+
+    df["p_value_adj_bh"] = adj_p
+    df["is_significant_bh"] = df["p_value_adj_bh"] < alpha
+
+    # ------------------------------------------------------------------
+    # Labels & ordering
+    # ------------------------------------------------------------------
+    outcomes_raw = df[outcome_col].astype(str).tolist()
+    outcomes_pretty = [labels_dict.get(o, o) for o in outcomes_raw]
+
+    m = len(outcomes_pretty)
+    y = np.arange(m)[::-1]
+
+    eff = df[eff_col].to_numpy(float)
+    lo = df[lo_col].to_numpy(float)
+    hi = df[hi_col].to_numpy(float)
+    p_adj = df["p_value_adj_bh"].to_numpy(float)
+    is_sig = df["is_significant_bh"].to_numpy(bool)
+
+    abs_ate = df["ATE_abs_for_annot"].to_numpy(float)
+    pct_eff = df["Effect_pct_for_annot"].to_numpy(float)
+
+    # ------------------------------------------------------------------
+    # Styling
+    # ------------------------------------------------------------------
+    c_sig = "#C62828"
+    c_nonsig = "#9E9E9E"
+    c_text = "#2b2b2b"
+
+    point_size = 42
+    ci_lw = 3.2
+    cap_h = 0.12
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    ax.axvline(0, linestyle="--", lw=1.2, color="#7a7a7a", alpha=0.75)
+    ax.grid(axis="x", lw=0.6, alpha=0.25)
+    ax.set_axisbelow(True)
+
+    # ------------------------------------------------------------------
+    # Draw CI + points
+    # ------------------------------------------------------------------
+    for j in range(m):
+        if not np.isfinite(eff[j]):
+            continue
+
+        color = c_sig if is_sig[j] else c_nonsig
+
+        if np.isfinite(lo[j]) and np.isfinite(hi[j]):
+            ax.hlines(y[j], lo[j], hi[j], lw=ci_lw, color=color, capstyle="round")
+            ax.plot([lo[j], lo[j]], [y[j] - cap_h, y[j] + cap_h], lw=ci_lw, color=color)
+            ax.plot([hi[j], hi[j]], [y[j] - cap_h, y[j] + cap_h], lw=ci_lw, color=color)
+
+        ax.scatter(eff[j], y[j], s=point_size, color="black", zorder=3)
+
+    # ------------------------------------------------------------------
+    # Annotations (only significant)
+    # ------------------------------------------------------------------
+    def fmt_p(p):
+        if not np.isfinite(p):
+            return "BH p=NA"
+        if p < 0.001:
+            return "BH p<0.001"
+        return f"BH p={p:.3f}"
+
+    if show_annotations:
+        for j in range(m):
+            if not (np.isfinite(p_adj[j]) and p_adj[j] < alpha):
+                continue
+
+            x_text = (
+                0.5 * (lo[j] + hi[j])
+                if np.isfinite(lo[j]) and np.isfinite(hi[j])
+                else eff[j]
+            )
+
+            text = (
+                f"{fmt_p(p_adj[j])} • "
+                f"ATE={abs_ate[j]:+.2g} • "
+                f"Δ={pct_eff[j]:+.1f}%"
+            )
+
+            ax.text(
+                x_text,
+                y[j] + text_above_offset,
+                text,
+                ha="center",
+                va="bottom",
+                fontsize=10,
+                color=c_text,
+                clip_on=False,
+            )
+
+    # ------------------------------------------------------------------
+    # Axes cosmetics
+    # ------------------------------------------------------------------
+    exposure_title = diet_short_names_mapping.get(treated_title, treated_title)
+    ax.set_title(exposure_title, fontsize=14, pad=12)
+    ax.set_xlabel(x_label, fontsize=12)
+
+    ax.set_yticks(y)
+    ax.set_yticklabels(outcomes_pretty, fontsize=11)
+
+    if xlim is not None:
+        ax.set_xlim(*xlim)
+
+    ax.set_ylim(-0.5, m - 0.5)
+
+    for spine in ["top", "right"]:
+        ax.spines[spine].set_visible(False)
+
+    plt.tight_layout()
+
+    # ------------------------------------------------------------------
+    # Save
+    # ------------------------------------------------------------------
+    final_out_dir = Path(out_dir) if out_dir is not None else Path(dir)
+    final_out_dir.mkdir(parents=True, exist_ok=True)
+
+    prefix = "" if experiment_id is None else f"{experiment_id}_"
+    out_path = final_out_dir / f"{prefix}{treated_title}.png"
+
+    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    return out_path
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from typing import Dict
+from statsmodels.stats.multitest import multipletests
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from typing import Dict
+from statsmodels.stats.multitest import multipletests
+
+
+def plot_combined_matching_ipw_results(
+    feature: str,
+    labels_dict: Dict[str, str],
+    annotation_dict: Dict[str, str],
+    diet_full_names_mapping: Dict[str, str],
+    sig_thresh: float = 0.05,
+    figsize_per_panel=(8, 8),
+    point_size: float = 60.0,
+    ci_line_width: float = 4.0,
+    cap_height: float = 0.15,
+):
+    """
+    Combined forest plot comparing Matching vs IPW results.
+
+    - Uses BH (FDR) correction
+    - FDR applied separately per method
+    - Matching and IPW non-significant results use different gray shades
+    """
+
+    # ------------------------------------------------------------------
+    # Load data
+    # ------------------------------------------------------------------
+    path_matching = f"results_matching/dataframes/{feature}_results.csv"
+    path_ipw = f"results/dataframes/{feature}_ate.csv"
+
+    df_matching_raw = pd.read_csv(path_matching)
+    df_ipw_raw = pd.read_csv(path_ipw)
+
+    target_outcomes = list(labels_dict.keys())
+
+    # ------------------------------------------------------------------
+    # Prep helpers
+    # ------------------------------------------------------------------
+    def prep_df(df, col_map):
+        d = df[df["outcome"].isin(target_outcomes)].copy()
+        d = d.rename(columns=col_map)
+        return d.set_index("outcome")
+
+    map_matching = {
+        "ATE_pct": "effect",
+        "CI_low_pct": "ci_low",
+        "CI_high_pct": "ci_high",
+        "p_value_pct_fdr_bh": "p",
+        "ATE": "ate_abs",
+    }
+
+    map_ipw = {
+        "ATE_pct_point": "effect",
+        "CI_pct_2.5": "ci_low",
+        "CI_pct_97.5": "ci_high",
+        "p_value_boot_abs": "p",
+        "ATE_abs_point": "ate_abs",
+    }
+
+    df_m = prep_df(df_matching_raw, map_matching)
+    df_i = prep_df(df_ipw_raw, map_ipw)
+
+    # ------------------------------------------------------------------
+    # BH correction (separately per method)
+    # ------------------------------------------------------------------
+    def apply_bh(df):
+        p = df["p"].to_numpy(dtype=float)
+        adj = np.full_like(p, np.nan)
+
+        ok = np.isfinite(p)
+        if ok.any():
+            adj[ok] = multipletests(
+                p[ok],
+                alpha=sig_thresh,
+                method="fdr_bh",
+                is_sorted=False,
+            )[1]
+
+        df["p_adj_bh"] = adj
+        df["is_sig"] = df["p_adj_bh"] < sig_thresh
+        return df
+
+    df_m = apply_bh(df_m)
+    df_i = apply_bh(df_i)
+
+    # ------------------------------------------------------------------
+    # Plot setup
+    # ------------------------------------------------------------------
+    outcomes = target_outcomes
+    ylabels = [labels_dict[o] for o in outcomes]
+    feature_title = diet_full_names_mapping.get(feature, feature).replace("\n", " ")
+
+    m = len(outcomes)
+    outcome_gap = 3.5
+    y_base = np.arange(m) * outcome_gap
+    offsets = [-0.5, 0.5]
+
+    # Colors
+    matching_color = "#ab001a"
+    ipw_color = "#ff5c75"
+    matching_gray = "#454545"   # darker gray
+    ipw_gray = "#8a8a8a"        # lighter gray
+
+    methods = [
+        ("Matching", df_m, matching_color, matching_gray),
+        ("IPW", df_i, ipw_color, ipw_gray),
+    ]
+
+    fig, ax = plt.subplots(figsize=figsize_per_panel)
+    ax.axvline(0.0, linestyle="--", linewidth=1.5, color="#8a8a8a", alpha=0.8)
+
+    # ------------------------------------------------------------------
+    # Draw
+    # ------------------------------------------------------------------
+    for idx, (method_name, data, sig_color, nonsig_color) in enumerate(methods):
+        d = data.reindex(outcomes)
+        y = y_base + offsets[idx]
+
+        eff = d["effect"].values
+        lo = d["ci_low"].values
+        hi = d["ci_high"].values
+        abs_vals = d["ate_abs"].values
+        is_sig = d["is_sig"].values
+
+        for j in range(m):
+            if not np.isfinite(eff[j]):
+                continue
+
+            color = sig_color if is_sig[j] else nonsig_color
+
+            # CI
+            ax.hlines(y[j], lo[j], hi[j], lw=ci_line_width, color=color, zorder=2)
+            ax.plot([lo[j], lo[j]], [y[j] - cap_height, y[j] + cap_height],
+                    lw=ci_line_width, color=color)
+            ax.plot([hi[j], hi[j]], [y[j] - cap_height, y[j] + cap_height],
+                    lw=ci_line_width, color=color)
+
+            # Point
+            ax.scatter(
+                eff[j], y[j],
+                s=point_size,
+                color="black",
+                edgecolors="white",
+                zorder=3,
+            )
+
+            # Annotation (only BH-significant)
+            if is_sig[j]:
+                unit = annotation_dict.get(outcomes[j], "")
+                unit_str = f" {unit}" if unit else ""
+                sign = "+" if abs_vals[j] > 0 else ""
+                txt = f"{sign}{abs_vals[j]:.1f}{unit_str} ({eff[j]:+.1f}%)"
+
+                ax.text(
+                    14, y[j],
+                    txt,
+                    ha="left",
+                    va="center",
+                    fontsize=14,
+                    fontweight="bold",
+                    color=color,
+                )
+
+    # ------------------------------------------------------------------
+    # Final styling
+    # ------------------------------------------------------------------
+    ax.set_yticks(y_base)
+    ax.set_yticklabels(ylabels, fontsize=14)
+    ax.set_xlim(-25, 25)
+    ax.invert_yaxis()
+
+    ax.set_xlabel("Effect (% point difference)", fontsize=14)
+    ax.set_title(feature_title, fontsize=14, pad=60)
+    ax.tick_params(axis="both", labelsize=14)
+
+    handles = [
+        plt.Line2D([0], [0], color=matching_color, lw=3, label="Matching (BH significant)"),
+        plt.Line2D([0], [0], color=matching_gray, lw=3, label="Matching (BH non-significant)"),
+        plt.Line2D([0], [0], color=ipw_color, lw=3, label="IPW (BH significant)"),
+        plt.Line2D([0], [0], color=ipw_gray, lw=3, label="IPW (BH non-significant)"),
+    ]
+
+    ax.legend(
+        handles=handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.15),
+        ncol=2,
+        frameon=False,
+        fontsize=13,
+    )
+
+    for spine in ["top", "right"]:
+        ax.spines[spine].set_visible(False)
+
+    plt.tight_layout()
+    return fig, ax
