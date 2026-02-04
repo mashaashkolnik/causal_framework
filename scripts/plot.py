@@ -8,9 +8,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import math
 from typing import Mapping, Sequence, Optional, Dict, Union
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
 
 
 def summarize_ps_dataframes_6cols(
@@ -1398,3 +1401,116 @@ def plot_combined_matching_ipw_results(
 
     plt.tight_layout()
     return fig, ax
+
+def plot_error_bars(
+    df_bootstrap: pd.DataFrame,
+    treated_title: str,
+    dir: str,
+    experiment_id: int | str | None = None,
+    target_title: str = "Treatment",
+    alpha: float = 0.05,
+) -> Path:
+    raw_pvals = df_bootstrap["p_value_boot_abs"].to_numpy()
+    adj_pvals = multipletests(
+        raw_pvals,
+        alpha=0.05,
+        method="fdr_bh",
+        maxiter=1,
+        is_sorted=False,
+        returnsorted=False,
+    )[1]
+    df_bootstrap["p_value_adj_bh"] = adj_pvals
+    df_bootstrap["is_significant_bh"] = df_bootstrap["p_value_adj_bh"] < alpha
+    x_label = "Effect (% point difference)"
+    point_size: float = 32.0
+    ci_line_width: float = 5.0
+    cap_height: float = 0.09
+    p_fontsize: int = 9
+    p_y_offset: float = 0.12
+    zero_line = True
+    def _color_for_sig(is_sig: bool) -> str:
+        return "#E31A1C" if is_sig else "#9E9E9E"
+    outcomes = df_bootstrap["outcome"].tolist()
+    m = len(outcomes)
+    y = np.arange(m)
+    fig, ax = plt.subplots(figsize=(10, 8))
+    if zero_line:
+        ax.axvline(
+            0.0,
+            linestyle="--",
+            linewidth=1.25,
+            color="#8a8a8a",
+            alpha=0.85,
+            zorder=0,
+        )
+    ax.grid(False)
+    eff = df_bootstrap["ATE_pct_point"].to_numpy()
+    lo = df_bootstrap["CI_pct_2.5"].to_numpy()
+    hi = df_bootstrap["CI_pct_97.5"].to_numpy()
+    p_raw = df_bootstrap["p_value_boot_abs"].to_numpy()
+    p_adj = df_bootstrap["p_value_adj_bh"].to_numpy()
+    is_sig = df_bootstrap["is_significant_bh"].to_numpy(dtype=bool)
+    for j in range(m):
+        if np.isnan(lo[j]) or np.isnan(hi[j]) or np.isnan(eff[j]):
+            continue
+        c = _color_for_sig(bool(is_sig[j]))
+        ax.hlines(y[j], lo[j], hi[j], lw=ci_line_width, color=c, zorder=2)
+        ax.plot([lo[j], lo[j]], [y[j] - cap_height, y[j] + cap_height], color=c, lw=ci_line_width, zorder=2)
+        ax.plot([hi[j], hi[j]], [y[j] - cap_height, y[j] + cap_height], color=c, lw=ci_line_width, zorder=2)
+    ax.scatter(eff, y, s=point_size, color="black", zorder=3)
+    for j in range(m):
+        if np.isnan(eff[j]) or np.isnan(p_raw[j]) or np.isnan(p_adj[j]):
+            continue
+        if p_raw[j] < 0.001:
+            p_text = "p < 0.001"
+        else:
+            p_text = f"p={p_adj[j]:.3f}"
+        if bool(is_sig[j]):
+            effect_text = f"{eff[j]:+.1f}%"
+            label = f"{p_text}, Δ = {effect_text}"
+        else:
+            label = p_text
+        ax.text(
+            eff[j],
+            y[j] - p_y_offset,
+            label,
+            ha="center",
+            va="bottom",
+            fontsize=p_fontsize,
+            color="#333",
+            zorder=4,
+            clip_on=False,
+        )
+    title_new = treated_title
+    ax.set_title(f"Effect of {title_new}", fontsize=14, pad=10)
+    ax.set_xlabel(x_label, fontsize=12)
+    ax.set_yticks(y)
+    outcomes_labeled = [' '.join(s.split('_target_day')[0].split('_')).capitalize() for s in outcomes]
+    ax.set_yticklabels(outcomes_labeled, fontsize=12)
+    ax.set_ylim(-0.5, m - 1 + 0.5)
+    ax.margins(y=0.02)
+    ax.set_xlim(-21, 21)
+    xmin, xmax = ax.get_xlim()
+    xticks = ax.get_xticks()
+    xticklabels = []
+    for t in xticks:
+        if t < xmin or t > xmax:
+            xticklabels.append("")
+        else:
+            xticklabels.append(f"{t:g}")
+    ax.set_xticks(xticks)
+    ax.set_xticklabels(xticklabels)
+    ax.invert_yaxis()
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("gray")
+    ax.spines["bottom"].set_color("gray")
+    fig.tight_layout()
+    out_dir = Path(dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    prefix = "" if experiment_id is None else f"{experiment_id}_"
+    safe_title = str(treated_title).replace(os.sep, "_")
+    out_path = out_dir / f"{prefix}{safe_title}.png"
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+    return out_path
