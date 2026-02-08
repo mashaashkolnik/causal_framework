@@ -171,6 +171,7 @@ def run_experiment(
         e_col=config["calibration"],
         features_to_check=important_confounders,
         outcomes=all_outcomes,
+        sleep_outcomes=variable_config["sleep_targets"],
         B=config["n_iter"],
         stabilize=config.get("stabilize", False),
         clip=config.get("clip"),

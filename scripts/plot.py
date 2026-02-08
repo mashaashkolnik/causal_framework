@@ -247,7 +247,7 @@ def heatmap_effects_generic(
         d = df.set_index(outcome_col) if outcome_col in df.columns else df.copy()
         d.index = d.index.astype(str)   
         effect_map[name] = d["ATE_pct_point"]
-        pval_map[name] = d["p_value_boot_abs"]
+        pval_map[name] = d["pvalue_fdr_bh"]
     effect_df = pd.DataFrame(effect_map)
     pval_df = pd.DataFrame(pval_map)
     if x_labels:
@@ -311,7 +311,7 @@ def plot_outcome_effects_panels_significant(
     effect_col: str = "ATE_pct_point",
     ci_low_col: str = "CI_pct_2.5",
     ci_high_col: str = "CI_pct_97.5",
-    p_col: str = "p_value_boot_abs",
+    p_col: str = "pvalue_fdr_bh",
     ate_abs_column: str = "ATE_abs_point",
     labels_dict: Optional[Dict[str, str]] = None,
     figsize_per_panel=(8, 8),
@@ -362,15 +362,6 @@ def plot_outcome_effects_panels_significant(
     for idx, (ax, d, label) in enumerate(zip(axes_flat, prepped, df_labels)):
         d = d.reindex(all_outcomes)
         p_vals = d["p_raw"].to_numpy()
-        mask = np.isfinite(p_vals)
-        if p_adjust and mask.any():
-            _, p_vals[mask], _, _ = multipletests(
-                p_vals[mask], 
-                alpha=sig_thresh, 
-                method=p_adjust, 
-                is_sorted=False,
-                returnsorted=False,
-            )  
         is_sig = p_vals < sig_thresh
         colors = ["#E31A1C" if s else "#9E9E9E" for s in is_sig]
         if zero_line:
@@ -415,7 +406,7 @@ def plot_outcome_effects_panels(
     effect_col: str = "ATE_pct_point",
     ci_low_col: str = "CI_pct_2.5",
     ci_high_col: str = "CI_pct_97.5",
-    p_col: str = "p_value_boot_abs",
+    p_col: str = "pvalue_fdr_bh",
     labels_dict: Optional[Dict[str, str]] = None,
     figsize_per_panel=(8, 8),
     x_label: str = "Effect (%)",
@@ -519,10 +510,6 @@ def matching_plot_error_bars(
     x_label = f"Effect ({'% difference vs matched controls' if is_pct_mode else 'absolute difference'})"
     raw_p = df[cols["p"]].to_numpy(dtype=float)
     adj_p = np.full_like(raw_p, np.nan)
-    mask = np.isfinite(raw_p)
-    if mask.any():
-        _, adj_p[mask], _, _ = multipletests(raw_p[mask], alpha=alpha, method="fdr_bh")
-    
     is_sig = (adj_p < alpha) & np.isfinite(adj_p)
     c_mean_col = df.columns[df.columns.str.contains('control_mean|mean_control|y0_mean')].tolist()
     c_mean = df[c_mean_col[0]] if c_mean_col else None
@@ -588,12 +575,12 @@ def plot_combined_matching_ipw_results(
         d = df[df["outcome"].isin(labels_dict.keys())].copy()
         d = d.rename(columns=col_map).set_index("outcome")
         p_vals = d["p"].to_numpy(dtype=float)
-        mask = np.isfinite(p_vals)
-        if mask.any():
-            _, adj_p, _, _ = multipletests(p_vals[mask], alpha=sig_thresh, method="fdr_bh")
-            d.loc[mask, "is_sig"] = adj_p < sig_thresh
-        else:
-            d["is_sig"] = False
+        #mask = np.isfinite(p_vals)
+        #if mask.any():
+        #    _, adj_p, _, _ = multipletests(p_vals[mask], alpha=sig_thresh, method="fdr_bh")
+        #    d.loc[mask, "is_sig"] = adj_p < sig_thresh
+        #else:
+        d["is_sig"] =  p_vals < sig_thresh
         return d
 
     map_matching = {
@@ -602,7 +589,7 @@ def plot_combined_matching_ipw_results(
     }
     map_ipw = {
         "ATE_pct_point": "effect", "CI_pct_2.5": "ci_low", "CI_pct_97.5": "ci_high",
-        "p_value_boot_abs": "p", "ATE_abs_point": "ate_abs"
+        "pvalue_fdr_bh": "p", "ATE_abs_point": "ate_abs"
     }
     df_m = load_and_prep(f"results_matching/dataframes/{feature}_results.csv", map_matching)
     df_i = load_and_prep(f"results/dataframes/{feature}_ate.csv", map_ipw)
@@ -654,15 +641,15 @@ def plot_error_bars(
     treated_title: str,
     dir: str,
     experiment_id: int | str | None = None,
-    target_title: str = "Treatment",
-    alpha: float = 0.05,
+    #target_title: str = "Treatment",
+    #alpha: float = 0.05,
 ) -> Path:
-    raw_pvals = df_bootstrap["p_value_boot_abs"].to_numpy()
-    _, adj_pvals, _, _ = multipletests(raw_pvals, alpha=alpha, method="fdr_bh")    
-    df = df_bootstrap.assign(
-        p_adj=adj_pvals,
-        is_sig=adj_pvals < alpha
-    )
+    #raw_pvals = df_bootstrap["pvalue_fdr_bh"].to_numpy()
+    #_, adj_pvals, _, _ = multipletests(raw_pvals, alpha=alpha, method="fdr_bh")    
+    df = df_bootstrap#.assign(
+    #    p_adj=adj_pvals,
+    #    is_sig=adj_pvals < alpha
+    #)
     outcomes = df["outcome"].tolist()
     m = len(outcomes)
     y_pos = np.arange(m)
@@ -670,7 +657,7 @@ def plot_error_bars(
     ax.axvline(0, linestyle="--", lw=1.25, color="#8a8a8a", alpha=0.85, zorder=0)
     eff = df["ATE_pct_point"].to_numpy()
     lo, hi = df["CI_pct_2.5"].to_numpy(), df["CI_pct_97.5"].to_numpy()
-    is_sig = df["is_sig"].to_numpy()
+    is_sig = df["fdr_bh_significant"].to_numpy()
     for i in range(m):
         if pd.isna([eff[i], lo[i], hi[i]]).any():
             continue            

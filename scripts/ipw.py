@@ -118,6 +118,7 @@ def bootstrap_ipw(
     e_col: str,
     features_to_check: Sequence[str],
     outcomes: Sequence[str],
+    sleep_outcomes: Sequence[str],
     B: int = 1000,
     stabilize: bool = True,
     clip: tuple[float, float] | None = (0.5, 99.5),
@@ -195,20 +196,20 @@ def bootstrap_ipw(
             }
         )
     ate_df = pd.DataFrame(rows).sort_values("outcome").reset_index(drop=True)
-    p_raw = ate_df["p_value_boot_abs"].to_numpy()
-    mask = np.isfinite(p_raw)
-    if mask.any():
-        adj_results = multipletests(
-            p_raw[mask],
+    mask_sleep = ate_df["outcome"].isin(sleep_outcomes) & np.isfinite(ate_df["p_value_boot_abs"])
+    
+    if mask_sleep.any():
+        p_to_correct = ate_df.loc[mask_sleep, "p_value_boot_abs"].to_numpy()        
+        reject, p_adj_subset, _, _ = multipletests(
+            p_to_correct,
             alpha=alpha,
             method="fdr_bh",
             is_sorted=False,
             returnsorted=False,
-        )
-        p_adj = np.full(len(ate_df), np.nan)
-        sig_adj = np.full(len(ate_df), False)
-        p_adj[mask] = adj_results[1]
-        sig_adj[mask] = adj_results[0]    
-        ate_df["pvalue_fdr_bh"] = p_adj
-        ate_df["fdr_bh_significant"] = sig_adj
+        )        
+        ate_df["pvalue_fdr_bh"] = np.nan
+        ate_df["fdr_bh_significant"] = False
+        ate_df.loc[mask_sleep, "pvalue_fdr_bh"] = p_adj_subset
+        ate_df.loc[mask_sleep, "fdr_bh_significant"] = reject
+        
     return balance_after, ate_df

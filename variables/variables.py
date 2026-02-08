@@ -143,7 +143,7 @@ EXPOSURES = {
     "eating_window_h_target_day": {"cutoff": [4, 18], "method": "median"},
 
     # ---------------- COFFEE ----------------
-    "caffeine_late_mg_target_day": {"cutoff": None, "method": "median"},
+    #"caffeine_late_mg_target_day": {"cutoff": None, "method": "median"},
 
     # ---------------- LATE NIGHT ----------------
     "night_calories_pct_target_day": {"cutoff": [5, 100], "method": "median"},

@@ -8,8 +8,8 @@ labels_dict = {
     'percent_of_light_sleep_time_target_day' : 'Light Sleep %',
     'sleep_efficiency_target_day' : 'Sleep Efficiency',
     'sleep_latency_minutes_target_day' : 'Sleep Onset Latency', 
+    'total_wake_time_after_sleep_onset_minutes_target_day' : 'Wake After Sleep Onset',    
     'heart_rate_mean_during_sleep_target_day': 'Mean Heart Rate',
-    'total_wake_time_after_sleep_onset_minutes_target_day' : 'Wake After Sleep Onset',
 }
 
 annotation_dict = {
