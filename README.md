@@ -36,7 +36,8 @@ CAUSAL_FRAMEWORK/
 ├── scripts/                      
 │   ├── helpers.py                 # Experiment runner, utilities
 │   ├── ipw.py                     # Trimming, weighting, bootstrap ATEs
-│   ├── matching.py                # Propensity-score models & SHAP
+│   ├── matching.py                # Propensity score matching
+│   ├── propensity.py              # Propensity score estimation
 │   └── plot.py                    # Figure generation
 │
 ├── variables/                     
@@ -47,9 +48,9 @@ CAUSAL_FRAMEWORK/
 ├── baseline_characteristics.ipynb # Descriptive cohort statistics
 ├── causal_engine.ipynb            # Main causal pipeline
 ├── matching.ipynb                 # Supplementary analysis
-├── results_aggregation.ipynb      # Result collation for figures/tables
+├── results_aggregation.ipynb      # Result aggregation for the manuscript
 │
-├── paper_files/                   # Manuscript assets
+├── manuscript/                    # Manuscript assets
 ├── results/                       # Outputs
 ├── results_matching/              # Supplementary outputs
 │
