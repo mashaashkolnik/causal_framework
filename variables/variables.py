@@ -84,6 +84,7 @@ variable_config = {
     "confounders": structural_confounders + direct_confounders + partial_confounders,
 }
 
+
 # ================================================================
 # Experiment configuration
 # ================================================================
@@ -101,6 +102,7 @@ class ExperimentConfig:
     limit: tuple = None
     quantile: float = 0.3
 
+
 BASE_CONFIG = ExperimentConfig()
 
 # ================================================================
@@ -109,23 +111,26 @@ BASE_CONFIG = ExperimentConfig()
 EXPOSURES = {
     # ---------------- PLANT-BASED ----------------
     "plant_based_whole_foods_ratio_target_day": {"cutoff": None, "method": "median"},
-    "furits_and_veggies_energy_ratio_target_day": {"cutoff": [0.025, 0.3], "method": "median"},
+    "furits_and_veggies_energy_ratio_target_day": {
+        "cutoff": [0.025, 0.3],
+        "method": "median",
+    },
     "whole_food_categories_ratio_target_day": {"cutoff": None, "method": "median"},
     "whole_dairy_categories_ratio_target_day": {"cutoff": None, "method": "median"},
     "meat_and_poultry_energy_ratio_target_day": {"cutoff": None, "method": "median"},
     "processed_categories_ratio_target_day": {"cutoff": None, "method": "median"},
-    "animal_based_whole_foods_ratio_target_day": {"cutoff": [0.1, 0.6], "method": "median"},
-
+    "animal_based_whole_foods_ratio_target_day": {
+        "cutoff": [0.1, 0.6],
+        "method": "median",
+    },
     # ---------------- SATURATED FAT & FIBER ----------------
     "sat_fat_g_target_day": {"cutoff": [0, 120], "method": "gb"},
     "fiber_density_energy_target_day": {"cutoff": None, "method": "median"},
     "unique_plant_based_foods_count_target_day": {"cutoff": None, "method": "median"},
-
     # ---------------- MACROS ----------------
     "prot_pct_target_day": {"cutoff": [0.05, 0.35], "method": "median"},
     "fat_pct_target_day": {"cutoff": None, "method": "median"},
     "carb_pct_target_day": {"cutoff": None, "method": "median"},
-
     # ---------------- NUTRIENTS ----------------
     "magnesium_mg_target_day": {"cutoff": None, "method": "gb"},
     "omega3_total_g_target_day": {"cutoff": None, "method": "gb"},
@@ -137,14 +142,9 @@ EXPOSURES = {
     "folate_target_day": {"cutoff": None, "method": "gb"},
     "vitamin_c_target_day": {"cutoff": None, "method": "gb"},
     "vitamin_e_target_day": {"cutoff": None, "method": "gb"},
-
     # ---------------- TIMING ----------------
     "hours_to_sleep_target_day": {"cutoff": [0.5, 10], "method": "median"},
     "eating_window_h_target_day": {"cutoff": [4, 18], "method": "median"},
-
-    # ---------------- COFFEE ----------------
-    #"caffeine_late_mg_target_day": {"cutoff": None, "method": "median"},
-
     # ---------------- LATE NIGHT ----------------
     "night_calories_pct_target_day": {"cutoff": [5, 100], "method": "median"},
 }
