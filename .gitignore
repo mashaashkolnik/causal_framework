@@ -216,7 +216,6 @@ catboost*/
 # ignore data folder
 data*
 charts*
-results*
 
 # ignore experiment outputs folder
 experiment/
