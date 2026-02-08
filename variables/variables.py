@@ -12,8 +12,8 @@ log_csv_path = "results/log.csv"
 df_folder_path = "results/dataframes"
 result_plot_folder_path = "results/final_plot"
 
-paper_tables_folder = "paper_files/tables"
-paper_figures_folder = "paper_files/figures"
+paper_tables_folder = "manuscript/tables"
+paper_figures_folder = "manuscript/figures"
 
 matching_folder_path_quantile = "results_matching/charts_quantile"
 matching_df_folder_path = "results_matching/dataframes"

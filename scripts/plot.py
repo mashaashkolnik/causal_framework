@@ -1,19 +1,27 @@
 from __future__ import annotations
-from typing import Dict, Optional
-import pandas as pd
-from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.patches import Rectangle
-from typing import List, Optional, Dict, Sequence
-import matplotlib.pyplot as plt
-import seaborn as sns
-import math
-from typing import Mapping, Sequence, Optional, Dict, Union
-from pathlib import Path
 
+import math
+import os
+from pathlib import Path
+from typing import (
+    Any,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union
+)
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import os
+import seaborn as sns
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.lines import Line2D
+from matplotlib.patches import Rectangle
+from statsmodels.stats.multitest import multipletests
 
 
 def summarize_ps_dataframes_6cols(
@@ -25,89 +33,48 @@ def summarize_ps_dataframes_6cols(
     female_values: tuple = ("female", "f", 0, False),
     ddof: int = 1,
 ) -> pd.DataFrame:
-    """
-    For each exposure dataframe, summarize mean ± std of:
-        [exposure, exposure_target_day] pooled together
-
-    Stratified into exactly 6 columns:
-        treated
-        untreated
-        treated_male
-        untreated_male
-        treated_female
-        untreated_female
-
-    If labels_dict is provided, rename index values using labels_dict.get(exposure, exposure).
-    Index name is set to "Exposure".
-    """
-
-    def is_male(s: pd.Series) -> pd.Series:
-        return s.isin(male_values) | s.astype(str).str.lower().isin(
-            [str(x).lower() for x in male_values]
+    
+    def get_mask(series: pd.Series, values: tuple) -> pd.Series:
+        return series.isin(values) | series.astype(str).str.lower().isin(
+            [str(v).lower() for v in values]
         )
 
-    def is_female(s: pd.Series) -> pd.Series:
-        return s.isin(female_values) | s.astype(str).str.lower().isin(
-            [str(x).lower() for x in female_values]
-        )
-
-    def fmt(x: pd.Series) -> str:
-        x = pd.to_numeric(x, errors="coerce").dropna()
-        if x.empty:
+    def format_stats(data: pd.Series) -> str:
+        clean_data = pd.to_numeric(data, errors="coerce").dropna()
+        if clean_data.empty:
             return ""
-        mean = float(x.mean())
-        std = float(x.std(ddof=ddof))
-        return f"{mean:.2f} ± {std:.2f}"
+        return f"{clean_data.mean():.2f} ± {clean_data.std(ddof=ddof):.2f}"
 
-    rows = {}
-
-    for exposure, df in ps_dataframes.items():
-        cols = [exposure, f"{exposure}_target_day"]
-        missing = [c for c in cols if c not in df.columns]
-        if missing:
-            raise ValueError(f"{exposure}: missing columns {missing}")
-
-        treated = df[treated_col].astype(bool)
-        male = is_male(df[gender_col])
-        female = is_female(df[gender_col])
-
-        rows[exposure] = {
-            "Treated Mean ± Std": fmt(pd.concat([df.loc[treated, c] for c in cols], axis=0)),
-            "Control Mean ± Std": fmt(pd.concat([df.loc[~treated, c] for c in cols], axis=0)),
-            "Treated Male Mean ± Std": fmt(pd.concat([df.loc[treated & male, c] for c in cols], axis=0)),
-            "Control Male Mean ± Std": fmt(pd.concat([df.loc[(~treated) & male, c] for c in cols], axis=0)),
-            "Treated Female Mean ± Std": fmt(pd.concat([df.loc[treated & female, c] for c in cols], axis=0)),
-            "Control Female Mean ± Std": fmt(pd.concat([df.loc[(~treated) & female, c] for c in cols], axis=0)),
-        }
-
-    res = pd.DataFrame.from_dict(rows, orient="index")
-
-    # Rename exposures if labels_dict provided
-    if labels_dict:
-        res.index = [labels_dict.get(k, k) for k in res.index]
-
-    res.index.name = "Exposure"
-
-    # enforce exact column order
-    res = res[
-        [
-            "Treated Mean ± Std",
-            "Control Mean ± Std",
-            "Treated Male Mean ± Std",
-            "Control Male Mean ± Std",
-            "Treated Female Mean ± Std",
-            "Control Female Mean ± Std",
-        ]
+    summary_rows = {}
+    strata_labels = [
+        ("Treated Mean ± Std", lambda t, m, f: t),
+        ("Control Mean ± Std", lambda t, m, f: ~t),
+        ("Treated Male Mean ± Std", lambda t, m, f: t & m),
+        ("Control Male Mean ± Std", lambda t, m, f: ~t & m),
+        ("Treated Female Mean ± Std", lambda t, m, f: t & f),
+        ("Control Female Mean ± Std", lambda t, m, f: ~t & f),
     ]
 
-    return res
+    for exposure, df in ps_dataframes.items():
+        val_cols = [exposure, f"{exposure}_target_day"]
+        if not all(c in df.columns for c in val_cols):
+            missing = [c for c in val_cols if c not in df.columns]
+            raise ValueError(f"{exposure}: missing columns {missing}")
+        
+        is_treated = df[treated_col].astype(bool)
+        is_m = get_mask(df[gender_col], male_values)
+        is_f = get_mask(df[gender_col], female_values)
+        row_stats = {}
+        for col_name, mask_func in strata_labels:
+            mask = mask_func(is_treated, is_m, is_f)
+            pooled_data = df.loc[mask, val_cols].stack()
+            row_stats[col_name] = format_stats(pooled_data)
+        idx_label = labels_dict.get(exposure, exposure) if labels_dict else exposure
+        summary_rows[idx_label] = row_stats
 
-import math
-from typing import Any, Mapping, Sequence
-
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
+    res = pd.DataFrame.from_dict(summary_rows, orient="index")
+    res.index.name = "Exposure"
+    return res[[label for label, _ in strata_labels]]
 
 
 def plot_test_control_distributions(
@@ -120,149 +87,82 @@ def plot_test_control_distributions(
     show_mean: bool = True,
     save_path: str | None = None,
 ) -> tuple[plt.Figure, np.ndarray]:
-    if rdis is None:
-        rdis = {}
-    if labels is None:
-        labels = {}
-
+    
+    rdis = rdis or {}
+    labels = labels or {}
     exposures = list(feature_values.keys())
     n = len(exposures)
-    if n == 0:
-        raise ValueError("feature_values is empty.")
-
-    ncols = max(1, int(ncols))
-    nrows = int(math.ceil(n / ncols))
-
-    fig_w = figsize_per_col * ncols
-    fig_h = figsize_per_row * nrows
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(fig_w, fig_h), squeeze=False)
-
-    def _to_clean_array(x: Any) -> np.ndarray:
+    nrows = math.ceil(n / ncols)
+    fig, axes = plt.subplots(
+        nrows, ncols, 
+        figsize=(figsize_per_col * ncols, figsize_per_row * nrows), 
+        squeeze=False
+    )
+    STYLE = {
+        "box_face": (0.55, 0.72, 0.95, 0.45),
+        "edge_col": (0.25, 0.25, 0.25, 1.0),
+        "rdi_col": (0.15, 0.65, 0.15, 0.9),
+        "median_props": dict(color="red", linewidth=2),
+        "mean_props": dict(color=(0.25, 0.25, 0.25, 1.0), linestyle="--", linewidth=1.5)
+    }
+    def _clean(x: Any) -> np.ndarray:
         arr = np.asarray(x, dtype=float).ravel()
         return arr[np.isfinite(arr)]
 
-    def _safe_mean(a: np.ndarray) -> float | None:
-        return float(np.mean(a)) if a.size else None
-
-    def _safe_median(a: np.ndarray) -> float | None:
-        return float(np.median(a)) if a.size else None
-
-    box_face = (0.55, 0.72, 0.95, 0.45)
-    edge_col = (0.25, 0.25, 0.25, 1.0)
-    rdi_col = (0.15, 0.65, 0.15, 0.9)
-
     for i, exp in enumerate(exposures):
         ax = axes[i // ncols, i % ncols]
-
-        treated = _to_clean_array(feature_values[exp].get("treated", []))
-        control = _to_clean_array(feature_values[exp].get("control", []))
-
-        data = [treated, control]
-        positions = [1, 2]
-
+        treated = _clean(feature_values[exp].get("treated", []))
+        control = _clean(feature_values[exp].get("control", []))
         bp = ax.boxplot(
-            data,
-            positions=positions,
+            [treated, control],
+            positions=[1, 2],
             widths=0.55,
             patch_artist=True,
             showmeans=show_mean,
             meanline=True,
             showfliers=False,
-            medianprops=dict(color="red", linewidth=2),
-            meanprops=dict(color=edge_col, linestyle="--", linewidth=1.5),
-            boxprops=dict(edgecolor=edge_col, linewidth=1.0),
-            whiskerprops=dict(color=edge_col, linewidth=1.0),
-            capprops=dict(color=edge_col, linewidth=1.0),
+            medianprops=STYLE["median_props"],
+            meanprops=STYLE["mean_props"],
+            boxprops=dict(edgecolor=STYLE["edge_col"], linewidth=1.0),
+            whiskerprops=dict(color=STYLE["edge_col"], linewidth=1.0),
+            capprops=dict(color=STYLE["edge_col"], linewidth=1.0),
         )
         for patch in bp["boxes"]:
-            patch.set_facecolor(box_face)
-
-        ax.set_xticks(positions, ["Test", "Control"])
-
-        title = labels.get(exp, exp)
-        ax.set_title(title, fontsize=11)
-
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
+            patch.set_facecolor(STYLE["box_face"])
+        ax.set_xticks([1, 2], ["Test", "Control"])
+        ax.set_title(labels.get(exp, exp), fontsize=11)
+        for spine in ["top", "right"]:
+            ax.spines[spine].set_visible(False)
         ax.spines["left"].set_color("gray")
         ax.spines["bottom"].set_color("gray")
-        ax.grid(False)
 
-        # --- median numeric labels (keep as in your original) ---
-        med_t = _safe_median(treated)
-        med_c = _safe_median(control)
-
-        y_min, y_max = ax.get_ylim()
-        y_span = max(1e-12, y_max - y_min)
-
-        #if med_t is not None:
-        #    ax.text(1, med_t + 0.03 * y_span, f"{med_t:.3f}", ha="center", va="bottom", fontsize=8)
-        #if med_c is not None:
-        #    ax.text(2, med_c + 0.03 * y_span, f"{med_c:.3f}", ha="center", va="bottom", fontsize=8)
-
-        # --- RDI line (if available) ---
-        if exp in rdis and rdis[exp] is not None:
+        if rdis.get(exp) is not None:
             rdi_val = float(rdis[exp])
-            ax.axhline(rdi_val, color=rdi_col, linestyle="--", linewidth=1.2, zorder=0)
-            ax.text(
-                0.98,
-                rdi_val,
-                f"RDI: {rdi_val:g}",
-                color=rdi_col,
-                fontsize=11,
-                ha="right",
-                va="bottom",
-                transform=ax.get_yaxis_transform(),
-            )
-
-        # --- NEW: per-axes legend showing means in upper-right ---
-        mean_t = _safe_mean(treated)
-        mean_c = _safe_mean(control)
-
-        # Use text-only "legend" entries (invisible handles) so it sits like a legend
-        mean_handles = [
-            Line2D([], [], linestyle="none", marker=None, label=f"Test mean = {mean_t:.1f}" if mean_t is not None else "Test mean = NA"),
-            Line2D([], [], linestyle="none", marker=None, label=f"Control mean = {mean_c:.1f}" if mean_c is not None else "Control mean = NA"),
-        ]
+            ax.axhline(rdi_val, color=STYLE["rdi_col"], linestyle="--", linewidth=1.2, zorder=0)
+            ax.text(0.98, rdi_val, f"RDI: {rdi_val:g}", color=STYLE["rdi_col"],
+                    fontsize=11, ha="right", va="bottom", transform=ax.get_yaxis_transform())
+        m_t = np.mean(treated) if treated.size else None
+        m_c = np.mean(control) if control.size else None     
         ax.legend(
-            handles=mean_handles,
-            #loc="upper right",
-            loc='lower left',
-            frameon=False,
-            fontsize=11,
-            handlelength=0,
-            handletextpad=0,
-            borderpad=0.2,
-            labelspacing=0.25,
+            handles=[
+                Line2D([], [], linestyle="none", label=f"Test mean = {m_t:.1f}" if m_t is not None else "Test mean = NA"),
+                Line2D([], [], linestyle="none", label=f"Control mean = {m_c:.1f}" if m_c is not None else "Control mean = NA")
+            ],
+            loc='lower left', frameon=False, fontsize=11, handlelength=0, handletextpad=0
         )
-
-    # Hide any unused axes
     for j in range(n, nrows * ncols):
         axes[j // ncols, j % ncols].axis("off")
-
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
-
-    legend_elements = [
-        Line2D([0], [0], color="red", lw=2, label="Median"),
-        Line2D([0], [0], color="black", lw=1.5, linestyle="--", label="Mean"),
-    ]
-    
     fig.legend(
-        handles=legend_elements,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 0.965),
-        ncol=2,
-        frameon=False,
-        fontsize=12,
+        handles=[
+            Line2D([0], [0], color="red", lw=2, label="Median"),
+            Line2D([0], [0], color=STYLE["edge_col"], lw=1.5, linestyle="--", label="Mean"),
+        ],
+        loc="upper center", bbox_to_anchor=(0.5, 0.965), ncol=2, frameon=False, fontsize=12
     )
-
-    if save_path is not None:
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    if save_path:
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
-
     return fig, axes
-
-import pandas as pd
-import numpy as np
 
 
 def summarize_runs(
@@ -276,80 +176,40 @@ def summarize_runs(
     asmd_col="ASMD",
     index_name="dietary exposure",
 ):
-    labels = {} if labels is None else dict(labels)
-
-    confounders = list(variable_config.get("confounders", []))
-    negative_targets = list(variable_config.get("negative_targets", []))
-    structural_confounders = list(variable_config.get("structural_confounders", []))
-    direct_confounders = list(variable_config.get("direct_confounders", []))
-
-    def _series(df, value_col):
+    labels = labels or {}
+    cfg = {
+        "confounders": variable_config.get("confounders", []),
+        "negative_targets": variable_config.get("negative_targets", []),
+        "structural": variable_config.get("structural_confounders", []),
+        "direct": variable_config.get("direct_confounders", [])
+    }
+    def _get_clean_series(df, val_col):
         if outcome_col and outcome_col in df.columns:
-            s = df.set_index(outcome_col)[value_col]
-        else:
-            if value_col not in df.columns:
-                raise KeyError(f"Missing column '{value_col}' in dataframe.")
-            s = df[value_col]
-            if s.index.name is None:
-                s.index.name = "variable"
+            df = df.set_index(outcome_col)
+        if val_col not in df.columns:
+            raise KeyError(f"Missing column '{val_col}'")
+        series = pd.to_numeric(df[val_col], errors="coerce")
+        return series[~series.index.duplicated(keep="first")].dropna()
 
-        if not s.index.is_unique:
-            s = s[~s.index.duplicated(keep="first")]
-        return s
-
-    def _pct(names, series, thresh):
-        if not names:
+    def _calc_pct(series, subset_names, threshold):
+        subset = series.reindex(subset_names).dropna()
+        if subset.empty:
             return np.nan
-        idx = [n for n in names if n in series.index]
-        if not idx:
-            return np.nan
-        vals = pd.to_numeric(series.loc[idx], errors="coerce").dropna()
-        if vals.empty:
-            return np.nan
-        return 100.0 * float((vals < thresh).sum()) / float(len(vals))
-
-    def _subset_vals(names, series):
-        if not names:
-            return pd.Series(dtype=float)
-        idx = [n for n in names if n in series.index]
-        if not idx:
-            return pd.Series(dtype=float)
-        return pd.to_numeric(series.loc[idx], errors="coerce").dropna()
-
-    rows = []
-    index_vals = []
-
+        return (subset < threshold).mean() * 100.0
+    summary_data = {}
     for k in sorted(control.keys()):
-        index_vals.append(labels.get(k, k))
-
-        s_p = _series(control[k], p_col)
-        pct_neg_sig = _pct(negative_targets, s_p, 0.05)
-
-        if k in asmd:
-            s_a = _series(asmd[k], asmd_col)
-
-            pct_struct = _pct(structural_confounders, s_a, 0.05)
-            pct_direct = _pct(direct_confounders, s_a, 0.05)
-            pct_conf_a = _pct(confounders, s_a, 0.10)
-
-            conf_vals = _subset_vals(confounders, s_a)
-            max_asmd = float(conf_vals.max()) if not conf_vals.empty else np.nan
-            mean_asmd = float(conf_vals.mean()) if not conf_vals.empty else np.nan
-        else:
-            pct_struct = pct_direct = pct_conf_a = np.nan
-            max_asmd = mean_asmd = np.nan
-
-        rows.append(
-            {
-                "% confounders with ASMD<0.1": pct_conf_a,
-                "% structural confounders with ASMD<0.05": pct_struct,
-                "% direct confounders with ASMD<0.05": pct_direct,
-                "% negative targets significant": pct_neg_sig,
-                "max ASMD (confounders)": max_asmd,
-                "mean ASMD (confounders)": mean_asmd,
-            }
-        )
-
+        p_series = _get_clean_series(control[k], p_col)
+        a_series = _get_clean_series(asmd[k], asmd_col) if k in asmd else pd.Series(dtype=float)
+        conf_vals = a_series.reindex(cfg["confounders"]).dropna()        
+        row_label = labels.get(k, k)
+        summary_data[row_label] = {
+            "% confounders with ASMD<0.1": _calc_pct(a_series, cfg["confounders"], 0.10),
+            "% direct confounders with ASMD<0.05": _calc_pct(a_series, cfg["direct"], 0.05),
+            "% structural confounders with ASMD<0.05": _calc_pct(a_series, cfg["structural"], 0.05),
+            "% negative targets significant": _calc_pct(p_series, cfg["negative_targets"], 0.05),
+            "max ASMD (confounders)": conf_vals.max() if not conf_vals.empty else np.nan,
+            "mean ASMD (confounders)": conf_vals.mean() if not conf_vals.empty else np.nan,
+        }
     cols = [
         "% confounders with ASMD<0.1",
         "% direct confounders with ASMD<0.05",
@@ -358,191 +218,101 @@ def summarize_runs(
         "max ASMD (confounders)",
         "mean ASMD (confounders)",
     ]
-
-    out = pd.DataFrame(rows, index=pd.Index(index_vals, name=index_name))[cols].astype(float).sort_values(
-        by=[
-            "% confounders with ASMD<0.1",
-            "% direct confounders with ASMD<0.05",
-            "% structural confounders with ASMD<0.05",
-            "max ASMD (confounders)",
-        ],
-        ascending=[False, False, False, True],
+    return (
+        pd.DataFrame.from_dict(summary_data, orient="index")[cols]
+        .rename_axis(index_name)
+        .sort_values(
+            by=cols[:3] + ["max ASMD (confounders)"],
+            ascending=[False, False, False, True]
+        )
     )
-
-    return out
 
 
 def heatmap_effects_generic(
-    dfs: List[pd.DataFrame],
-    treatment_names: Sequence[str],
-    labels_dict: Optional[Dict[str, str]] = None,
-    x_labels: Optional[Dict[str, str]] = None,
-    outcome_col: str = "outcome",
+    dfs: list[pd.DataFrame],
+    treatment_names: list[str],
+    labels_dict: dict[str, str] = None,
+    x_labels: dict[str, str] = None,
+    outcome_col: str = "",
     figsize=(15, 12),
-    title="Relative Effect of Different Nutrition Factors on Sleep",
-    fontsize_title=18,
-    fontsize_ticks=13,          # was 11
-    p_fontsize=12,              # was 10
-    p_format="p = {:.3g}",
-    show_effect=True,
+    fontsize_ticks=13,
+    p_fontsize=12,
     effect_format="{:.1f}%",
     sig_thresh: float = 0.05,
     hatch_pattern: str = "///",
     hatch_color: str = "lightgray",
 ):
-    if len(dfs) != len(treatment_names):
-        raise ValueError("dfs and treatment_names must have the same length.")
+    effect_map, pval_map = {}, {}
+    for name, df in zip(treatment_names, dfs):
+        d = df.set_index(outcome_col) if outcome_col in df.columns else df.copy()
+        d.index = d.index.astype(str)   
+        effect_map[name] = d["ATE_pct_point"]
+        pval_map[name] = d["p_value_boot_abs"]
+    effect_df = pd.DataFrame(effect_map)
+    pval_df = pd.DataFrame(pval_map)
+    if x_labels:
+        ordered_cols = [c for c in x_labels if c in effect_df.columns]
+        other_cols = [c for c in effect_df.columns if c not in ordered_cols]
+        effect_df = effect_df[ordered_cols + other_cols]
+        pval_df = pval_df[ordered_cols + other_cols]
 
-    # --- normalize inputs ---
-    normed = []
-    for i, df in enumerate(dfs):
-        need = {"ATE_pct_point", "p_value_boot_abs"}
-        if not need.issubset(df.columns):
-            missing = need - set(df.columns)
-            raise ValueError(f"DataFrame {i} missing columns: {missing}")
-        d = df.copy()
-        if outcome_col in d.columns:
-            d = d.set_index(outcome_col)
-        d.index = d.index.astype(str)
-        normed.append(d[["ATE_pct_point", "p_value_boot_abs"]])
-
-    # Build matrices
-    all_outcomes = sorted(set().union(*[d.index for d in normed]))
-    effect_df = pd.DataFrame(index=all_outcomes, columns=treatment_names, dtype=float)
-    pval_df   = pd.DataFrame(index=all_outcomes, columns=treatment_names, dtype=float)
-    for name, d in zip(treatment_names, normed):
-        effect_df.loc[d.index, name] = d["ATE_pct_point"].astype(float)
-        pval_df.loc[d.index, name]   = d["p_value_boot_abs"].astype(float)
-
-    # --- reorder x-axis based on x_labels dict keys ---
-    if x_labels is not None:
-        ordered_cols = [col for col in x_labels.keys() if col in effect_df.columns]
-        remaining = [col for col in effect_df.columns if col not in ordered_cols]
-        new_order = ordered_cols + remaining
-        effect_df = effect_df[new_order]
-        pval_df   = pval_df[new_order]
-        treatment_names = new_order
-
-    # Optional row order / labels
-    if labels_dict is not None:
-        ordered = [k for k in labels_dict.keys() if k in effect_df.index]
-        effect_df = effect_df.reindex(ordered)
-        pval_df   = pval_df.reindex(ordered)
-
-    # Color scale range
-    arr = effect_df.to_numpy(dtype=float)
-    finite_vals = arr[np.isfinite(arr)]
-    vmax = float(np.nanmax(np.abs(finite_vals))) if finite_vals.size else 1.0
-    if not np.isfinite(vmax) or vmax == 0:
-        vmax = 1.0
-
-    colors = ["#ff5e8c", "#ffffff", "#6eb9ff"]
-    cmap = LinearSegmentedColormap.from_list("soft_bwr_r", colors)
-
-    sig = (pval_df < sig_thresh) & np.isfinite(pval_df) & np.isfinite(effect_df)
-
-    # -----------------------------------------------------------
-    # Annotation function without p-values — only effect
-    # -----------------------------------------------------------
-    def _fmt_cell(i, j):
-        if not sig.iat[i, j]:
-            return ""
-        eff = effect_df.iat[i, j]
-        if pd.isna(eff):
-            return ""
-        return effect_format.format(eff).strip()
-
+    if labels_dict:
+        ordered_rows = [r for r in labels_dict.keys() if r in effect_df.index]
+        effect_df = effect_df.reindex(ordered_rows)
+        pval_df = pval_df.reindex(ordered_rows)
+        
+    is_sig = (pval_df < sig_thresh) & pval_df.notna() & effect_df.notna()
     annot = effect_df.copy().astype(object)
-    for i in range(effect_df.shape[0]):
-        for j in range(effect_df.shape[1]):
-            annot.iat[i, j] = _fmt_cell(i, j)
+    annot = effect_df.applymap(lambda v: effect_format.format(v) if not pd.isna(v) else "")
+    annot = annot.where(is_sig, "")
+    vmax = np.nanmax(np.abs(effect_df.to_numpy())) or 1.0
+    cmap = LinearSegmentedColormap.from_list("soft_bwr_r", ["#ff5e8c", "#ffffff", "#6eb9ff"])
 
-    # --- PLOT ---
     plt.figure(figsize=figsize)
     ax = sns.heatmap(
-        effect_df.astype(float),
-        cmap=cmap,
-        vmin=-vmax, vmax=vmax, center=0,
-        mask=~sig,
+        effect_df,
+        cmap=cmap, vmin=-vmax, vmax=vmax, center=0,
+        mask=~is_sig,
         annot=annot,
         fmt="",
-        annot_kws={"fontsize": p_fontsize, "color": "black", "ha": "center", "va": "center"},
-        linewidths=3.5,
-        linecolor="white",
-        cbar=True,
-        square=False
+        annot_kws={"fontsize": p_fontsize, "color": "black"},
+        linewidths=3.5, linecolor="white", cbar=True
     )
-
-    # hatched non-significant tiles
-    nrows, ncols = effect_df.shape
-    for i in range(nrows):
-        for j in range(ncols):
-            if not sig.iat[i, j]:
-                ax.add_patch(
-                    Rectangle(
-                        (j, i), 1, 1,
-                        fill=True,
-                        facecolor="white",
-                        hatch=hatch_pattern,
-                        edgecolor=hatch_color,
-                        linewidth=0,
-                        zorder=6
-                    )
-                )
-
-    # grid borders
-    for x in range(effect_df.shape[1] + 1):
-        ax.axvline(x, color="white", linewidth=3.5, alpha=1, zorder=7)
-    for y in range(effect_df.shape[0] + 1):
-        ax.axhline(y, color="white", linewidth=3.5, alpha=1, zorder=7)
-
-    # No title for journal figure
-    # ax.set_title(title, fontsize=fontsize_title, pad=20)
-
-    # x labels using x_labels
-    xticks = ax.get_xticklabels()
-    new_x = []
-    for tick in xticks:
-        key = tick.get_text()
-        if x_labels and key in x_labels:
-            new_x.append(x_labels[key])
-        else:
-            new_x.append(key)
-
-    ax.set_xticklabels(new_x, rotation=0, fontsize=fontsize_ticks)
-
-    # put x-axis ticks at the TOP
+    for i in range(len(effect_df.index)):
+        for j in range(len(effect_df.columns)):
+            if not is_sig.iat[i, j]:
+                ax.add_patch(Rectangle(
+                    (j, i), 1, 1, fill=True, facecolor="white",
+                    hatch=hatch_pattern, edgecolor=hatch_color, 
+                    linewidth=0, zorder=1
+                ))
+                
+    x_display_labels = [x_labels.get(c, c) for c in effect_df.columns] if x_labels else effect_df.columns
+    ax.set_xticklabels(x_display_labels, rotation=0, fontsize=fontsize_ticks)
     ax.xaxis.tick_top()
-    ax.xaxis.set_label_position("top")
-    ax.tick_params(axis="x", which="both", pad=8)
-
-    # y labels
-    ylabels = [labels_dict.get(idx, idx) for idx in effect_df.index] if labels_dict else list(effect_df.index)
-    ax.set_yticklabels(ylabels, fontsize=fontsize_ticks)
-
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-
-    # colorbar
+    ax.xaxis.set_label_position("top")    
+    y_display_labels = [labels_dict[r] for r in effect_df.index]
+    ax.set_yticklabels(y_display_labels, fontsize=fontsize_ticks)
+    ax.set_ylabel(None)
+    ax.set_xlabel(None)
+    sns.despine(left=True, bottom=True, top=True, right=True)
     cbar = ax.collections[0].colorbar
-    cbar.ax.tick_params(labelsize=fontsize_ticks)
-    cbar.outline.set_visible(False)
     cbar.set_label("Effect (%)", fontsize=fontsize_ticks)
-
+    cbar.ax.tick_params(labelsize=fontsize_ticks)
     plt.tight_layout()
-    plt.show()
-    
+    return ax
+
 
 def plot_outcome_effects_panels_significant(
     dfs: Union[pd.DataFrame, List[pd.DataFrame]],
     df_labels: Optional[Sequence[str]] = None,
-    annotation_dict=None,
+    annotation_dict: Optional[Dict[str, str]] = None,
     outcome_col: str = "outcome",
     effect_col: str = "ATE_pct_point",
     ci_low_col: str = "CI_pct_2.5",
     ci_high_col: str = "CI_pct_97.5",
     p_col: str = "p_value_boot_abs",
-    ate_abs_column = "ATE_abs_point",
+    ate_abs_column: str = "ATE_abs_point",
     labels_dict: Optional[Dict[str, str]] = None,
     figsize_per_panel=(8, 8),
     x_label: str = "Effect (% point difference)",
@@ -556,233 +326,97 @@ def plot_outcome_effects_panels_significant(
     sort_by: Optional[str] = None,
     zero_line: bool = True,
     panels_per_row: int = 3,
-    p_adjust: Optional[str] = "fdr_bh",   # NEW: None disables adjustment
-    annotate_adj: bool = True,            # NEW: whether to show adjusted p in text
+    p_adjust: Optional[str] = "fdr_bh",
 ):
-    """
-    Panels in a grid. Shares a single outcome order across panels.
-    """
-
-    # ---------- normalize inputs ----------
-    if isinstance(dfs, pd.DataFrame):
-        dfs = [dfs]
+    dfs = [dfs] if isinstance(dfs, pd.DataFrame) else dfs
     n = len(dfs)
-    if n == 0:
-        raise ValueError("No dataframes provided.")
-    if df_labels is None:
-        df_labels = [f"Set {i+1}" for i in range(n)]
-    if len(df_labels) != n:
-        raise ValueError("df_labels length must match number of dataframes.")
+    df_labels = df_labels or [f"Set {i+1}" for i in range(n)]
+    annotation_dict = annotation_dict or {}
 
-    # ---------- standardize columns ----------
     prepped = []
     for df in dfs:
         d = df.copy()
-        if outcome_col in d.columns:
-            d = d.set_index(outcome_col)
-        for col in (effect_col, ci_low_col, ci_high_col, p_col):
-            if col not in d.columns:
-                raise KeyError(f"Missing column '{col}' in one dataframe.")
-        d = d[[effect_col, ci_low_col, ci_high_col, p_col, ate_abs_column]].rename(
-            columns={effect_col: "effect", ci_low_col: "ci_low", ci_high_col: "ci_high", p_col: "p_raw"}
-        )
-        prepped.append(d)
-
-    # ---------- outcome order based on first df ----------
+        if outcome_col in d.columns: d = d.set_index(outcome_col)        
+        cols_map = {effect_col: "eff", ci_low_col: "lo", ci_high_col: "hi", 
+                    p_col: "p_raw", ate_abs_column: "abs_val"}
+        prepped.append(d[list(cols_map.keys())].rename(columns=cols_map))
     base = prepped[0]
     if sort_by == "abs":
-        order = base["effect"].abs().sort_values(ascending=True).index.tolist()
+        order = base["eff"].abs().sort_values().index.tolist()
     elif sort_by == "signed":
-        order = base["effect"].sort_values(ascending=True).index.tolist()
+        order = base["eff"].sort_values().index.tolist()
     else:
         order = list(base.index)
-
-    union = set(order)
-    for d in prepped[1:]:
-        union |= set(d.index)
-    outcomes = order + [o for o in union if o not in order]
-
-    if labels_dict:
-        ylabels = [labels_dict.get(o) for o in outcomes]
-    else:
-        ylabels = list(outcomes)
-
-    m = len(outcomes)
-    y = np.arange(m)
-
-    # ---------- figure and axes (grid) ----------
+    all_outcomes = order + [o for d in prepped for o in d.index if o not in order]
+    ylabels = [labels_dict.get(o, o) for o in all_outcomes] if labels_dict else all_outcomes
+    m = len(all_outcomes)
+    y_pos = np.arange(m)
     cols = min(panels_per_row, n)
     rows = math.ceil(n / panels_per_row)
-    fig_w = figsize_per_panel[0] * cols
-    fig_h = figsize_per_panel[1] * rows
-
     fig, axes = plt.subplots(
-        rows, cols, sharey=True, figsize=(fig_w, fig_h),
-        gridspec_kw={"wspace": 0.05, "hspace": 0.15},
-        constrained_layout=False,
+        rows, cols, sharey=True, 
+        figsize=(figsize_per_panel[0] * cols, figsize_per_panel[1] * rows),
+        squeeze=False
     )
-
-    if rows == 1 and cols == 1:
-        axes_2d = np.array([[axes]])
-    elif rows == 1:
-        axes_2d = np.array([axes])
-    elif cols == 1:
-        axes_2d = axes.reshape(rows, 1)
-    else:
-        axes_2d = axes
-
-    axes_flat = axes_2d.flatten()
-
-    # ---------- color rule now depends on significance flag ----------
-    def _color_for_sig(is_sig: bool) -> str:
-        return "#E31A1C" if is_sig else "#9E9E9E"
-
-    # ---------- helper: per-panel p-value adjustment ----------
-    def _adjust_pvals(p_raw: np.ndarray) -> np.ndarray:
-        """
-        Adjust p-values within a panel.
-        Leaves NaNs as NaN, and adjusts only finite entries.
-        """
-        p_raw = np.asarray(p_raw, dtype=float)
-        p_adj = np.full_like(p_raw, np.nan, dtype=float)
-
-        mask = np.isfinite(p_raw)
-        if mask.sum() == 0 or p_adjust is None:
-            return p_raw.copy()  # no adjustment
-
-        p_adj_masked = multipletests(
-            p_raw[mask],
-            alpha=sig_thresh,
-            method=p_adjust,
-            is_sorted=False,
-            returnsorted=False,
-        )[1]
-
-        p_adj[mask] = p_adj_masked
-        return p_adj
-
-    # ---------- draw panels ----------
-    for idx, (ax, d, raw_label) in enumerate(zip(axes_flat, prepped, df_labels)):
-        d = d.reindex(outcomes)
-
-        eff = d["effect"].to_numpy()
-        lo = d["ci_low"].to_numpy()
-        hi = d["ci_high"].to_numpy()
-        p_raw = d["p_raw"].to_numpy()
-        ate_abs_point = d["ATE_abs_point"].to_numpy()
-
-        # NEW: per-panel adjustment computed after reindexing (so it matches plotted outcomes)
-        #p_adj = _adjust_pvals(p_raw)
-        #is_sig = np.isfinite(p_adj) & (p_adj < sig_thresh)
-
-        is_sig = p_raw < sig_thresh
+    axes_flat = axes.flatten()
+    for idx, (ax, d, label) in enumerate(zip(axes_flat, prepped, df_labels)):
+        d = d.reindex(all_outcomes)
+        p_vals = d["p_raw"].to_numpy()
+        mask = np.isfinite(p_vals)
+        if p_adjust and mask.any():
+            _, p_vals[mask], _, _ = multipletests(
+                p_vals[mask], 
+                alpha=sig_thresh, 
+                method=p_adjust, 
+                is_sorted=False,
+                returnsorted=False,
+            )  
+        is_sig = p_vals < sig_thresh
+        colors = ["#E31A1C" if s else "#9E9E9E" for s in is_sig]
         if zero_line:
-            ax.axvline(0.0, linestyle="--", linewidth=1.25, color="#8a8a8a", alpha=0.85, zorder=0)
-
-        ax.grid(False)
-
-        # CIs + caps
-        for j in range(m):
-            if np.isnan(lo[j]) or np.isnan(hi[j]):
-                continue
-            c = _color_for_sig(bool(is_sig[j]))
-            ax.hlines(y[j], lo[j], hi[j], lw=ci_line_width, color=c, zorder=2)
-            ax.plot([lo[j], lo[j]], [y[j] - cap_height, y[j] + cap_height], color=c, lw=ci_line_width, zorder=2)
-            ax.plot([hi[j], hi[j]], [y[j] - cap_height, y[j] + cap_height], color=c, lw=ci_line_width, zorder=2)
-
-        # point estimate
-        ax.scatter(eff, y, s=point_size, color="black", zorder=3)
-
-        # annotations
+            ax.axvline(0, linestyle="--", lw=1.25, color="#8a8a8a", alpha=0.85, zorder=0)
+        for i in range(m):
+            if pd.isna(d["lo"].iat[i]): continue
+            color = colors[i]
+            ax.hlines(y_pos[i], d["lo"].iat[i], d["hi"].iat[i], lw=ci_line_width, color=color, zorder=2)
+            ax.vlines([d["lo"].iat[i], d["hi"].iat[i]], y_pos[i]-cap_height, y_pos[i]+cap_height, color=color, lw=ci_line_width, zorder=2)
+        ax.scatter(d["eff"], y_pos, s=point_size, color="black", zorder=3)
         if annotate_p:
-            for j in range(m):
-                if np.isnan(eff[j]) or np.isnan(p_raw[j]):
-                    continue
-
-                # 2) remove annotation when NOT significant
-                if not bool(is_sig[j]):
-                    continue
-
-                # 1) significant: "ATE={ATE_abs_point} (±{effect}%); p-value={p-value}"
-                # ATE_abs_point is assumed to be the absolute effect in original units.
-                # If your df does NOT have it, we fall back to eff[j] (percent points).
-                ate_abs = None
-                if "ATE_abs_point" in d.columns:
-                    ate_abs = d["ATE_abs_point"].to_numpy()[j]
-                else:
-                    ate_abs = np.nan  # will fallback below
-
-                # p-value formatting
-                if p_raw[j] < 0.001:
-                    p_txt = "<0.001"
-                else:
-                    p_txt = f"{p_raw[j]:.3f}"
-
-                #print(outcomes)
-                #measure_units = annotation_dict[outcomes[d]]
+            for i in range(m):
+                if not is_sig[i] or pd.isna(d["eff"].iat[i]): continue  
+                unit = annotation_dict.get(all_outcomes[i], "")
+                sign = '+' if d["eff"].iat[i] > 0 else '-'
+                txt = f"{sign}{abs(d['abs_val'].iat[i]):.1f} {unit} ({d['eff'].iat[i]:+.0f}%)"
                 
-                outcome_key = outcomes[j]  # this is the raw outcome name
-                measure_units = annotation_dict.get(outcome_key, "") if annotation_dict else "idk"
-                
-                sig = '+' if eff[j] > 0 else '-'
-                txt = f"{sig}{abs(ate_abs_point[j]):.1f} {measure_units} ({eff[j]:+.0f}%)" # ; p-value={p_txt}
-
-                ax.text(
-                    eff[j],
-                    y[j] - p_y_offset,
-                    txt,
-                    ha="center",
-                    va="bottom",
-                    fontsize=p_fontsize,
-                    color="#333",
-                    zorder=4,
-                    clip_on=False,
-                )
-
-        # cosmetics
-        ax.set_title(raw_label, fontsize=p_fontsize, pad=10)
+                ax.text(d["eff"].iat[i], y_pos[i] - p_y_offset, txt, 
+                        ha="center", va="bottom", fontsize=p_fontsize, color="#333", zorder=4)
+        ax.set_title(label, fontsize=p_fontsize, pad=10)
         ax.set_xlabel(x_label, fontsize=p_fontsize)
-
-        ax.set_yticks(y)
+        ax.set_yticks(y_pos)
         ax.set_yticklabels(ylabels, fontsize=p_fontsize)
-
-        ax.set_ylim(-0.5, m - 1 + 0.5)
-        ax.margins(y=0.02)
-
+        ax.set_ylim(-0.5, m - 0.5)
         ax.set_xlim(-11, 11)
-        xmin, xmax = ax.get_xlim()
-        xticks = ax.get_xticks()
-        ax.set_xticks(xticks)
-        ax.set_xticklabels([("" if (t < xmin or t > xmax) else f"{t:g}") for t in xticks], fontsize=p_fontsize)
-
         ax.invert_yaxis()
-
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
+        for s in ["top", "right"]: ax.spines[s].set_visible(False)
         ax.spines["left"].set_color("gray")
         ax.spines["bottom"].set_color("gray")
-
-        col = idx % cols
-        if col != 0:
+        if idx % cols != 0:
             ax.tick_params(axis="y", labelleft=False, left=False)
-
-    for k in range(n, rows * cols):
-        axes_flat[k].set_visible(False)
-
-    return fig, axes_2d
+    for k in range(n, len(axes_flat)): axes_flat[k].set_visible(False)
+    return fig, axes
 
 
 def plot_outcome_effects_panels(
     results: Mapping[str, pd.DataFrame],
     to_plot: Sequence[str],
     *,
-    exposure_labels: Optional[Mapping[str, str]] = None,   # e.g., diet_full_names_mapping
+    exposure_labels: Optional[Mapping[str, str]] = None,
     outcome_col: str = "outcome",
     effect_col: str = "ATE_pct_point",
     ci_low_col: str = "CI_pct_2.5",
     ci_high_col: str = "CI_pct_97.5",
     p_col: str = "p_value_boot_abs",
-    labels_dict: Optional[Dict[str, str]] = None,          # outcome label prettifier
+    labels_dict: Optional[Dict[str, str]] = None,
     figsize_per_panel=(8, 8),
     x_label: str = "Effect (%)",
     sig_thresh: float = 0.05,
@@ -796,418 +430,145 @@ def plot_outcome_effects_panels(
     zero_line: bool = True,
     factor: float = 1.0,
 ):
-    """
-    Single-panel forest plot where multiple exposures (selected by `to_plot`) are shown together.
+    exposure_labels = exposure_labels or {}
+    prepped_dfs = []    
+    for key in to_plot:
+        if key not in results:
+            raise KeyError(f"Key '{key}' missing in results.")
+        df = results[key].copy()
+        if outcome_col in df.columns:
+            df = df.set_index(outcome_col)            
+        cols = {effect_col: "eff", ci_low_col: "lo", ci_high_col: "hi", p_col: "p"}
+        prepped_dfs.append(df[list(cols.keys())].rename(columns=cols))
 
-    """
-    exposure_labels = {} if exposure_labels is None else dict(exposure_labels)
-
-    # ---------- build dfs + labels in the order of to_plot ----------
-    missing = [k for k in to_plot if k not in results]
-    if missing:
-        raise KeyError(f"These keys from `to_plot` are missing in `results`: {missing}")
-
-    dfs = [results[k] for k in to_plot]
-    df_labels = [exposure_labels.get(k, k) for k in to_plot]
-    n = len(dfs)
-    if n == 0:
-        raise ValueError("`to_plot` is empty.")
-
-    # ---------- standardize columns ----------
-    prepped = []
-    for df in dfs:
-        d = df.copy()
-        if outcome_col in d.columns:
-            d = d.set_index(outcome_col)
-
-        for col in (effect_col, ci_low_col, ci_high_col, p_col):
-            if col not in d.columns:
-                raise KeyError(f"Missing column '{col}' in one dataframe.")
-
-        d = d[[effect_col, ci_low_col, ci_high_col, p_col]].rename(
-            columns={effect_col: "effect", ci_low_col: "ci_low", ci_high_col: "ci_high", p_col: "p"}
-        )
-        prepped.append(d)
-
-    # ---------- outcome order based on first df ----------
-    base = prepped[0]
+    base = prepped_dfs[0]
     if sort_by == "abs":
-        order = base["effect"].abs().sort_values(ascending=True).index.tolist()
+        order = base["eff"].abs().sort_values().index.tolist()
     elif sort_by == "signed":
-        order = base["effect"].sort_values(ascending=True).index.tolist()
+        order = base["eff"].sort_values().index.tolist()
     else:
         order = list(base.index)
 
-    union = set(order)
-    for d in prepped[1:]:
-        union |= set(d.index)
-    outcomes = order + [o for o in union if o not in order]
-
-    # prettified y-labels (outcomes)
-    if labels_dict:
-        ylabels = [labels_dict.get(o, o) for o in outcomes]
-    else:
-        ylabels = list(outcomes)
-
-    m = len(outcomes)
-
-    # OUTCOME spacing > treatment spacing
+    outcomes = order + [o for d in prepped_dfs for o in d.index if o not in order]
+    ylabels = [labels_dict.get(o, o) for o in outcomes] if labels_dict else outcomes
+    m_outcomes = len(outcomes)
     outcome_gap = 2.25
-    y_base = np.arange(m) * outcome_gap
-
-    # ---------- figure & single axes ----------
-    fig_w, fig_h = figsize_per_panel
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
-
-    # ---------- colors & offsets ----------
-    pastel_palette = ["#777C6D", "#B7B89F", "#CBCBCB", "#57595B", "#452829", "#A18D6D"]
-    colors = [pastel_palette[i % len(pastel_palette)] for i in range(n)]
-
-    if n == 1:
-        offsets = [0.0]
-    else:
-        offsets = np.linspace(-0.5, 0.5, n)
-
-    # ---------- global x-range for p-label positioning ----------
-    all_los, all_his = [], []
-    for d in prepped:
-        dd = d.reindex(outcomes)
-        all_los.append(dd["ci_low"].values)
-        all_his.append(dd["ci_high"].values)
-    all_los = np.concatenate(all_los)
-    all_his = np.concatenate(all_his)
-
-    xmin = np.nanmin(all_los)
-    xmax = np.nanmax(all_his)
-    x_span = xmax - xmin if np.isfinite(xmax - xmin) and (xmax - xmin) > 0 else 1.0
-    p_dx = 0.02 * x_span
-
-    # ---------- draw everything ----------
+    y_base = np.arange(m_outcomes) * outcome_gap
+    offsets = np.linspace(-0.5, 0.5, len(to_plot)) if len(to_plot) > 1 else [0.0]
+    colors = ["#777C6D", "#B7B89F", "#CBCBCB", "#57595B", "#452829", "#A18D6D"]
+    fig, ax = plt.subplots(figsize=figsize_per_panel)
     if zero_line:
-        ax.axvline(0.0, linestyle="--", linewidth=1.5, color="#8a8a8a", alpha=0.85, zorder=0)
-
+        ax.axvline(0, linestyle="--", lw=1.5, color="#8a8a8a", alpha=0.85, zorder=0)
     handles = []
-
-    for d, label, color, offset in zip(prepped, df_labels, colors, offsets):
-        d = d.reindex(outcomes)
-
-        eff = d["effect"].values * factor
-        lo  = d["ci_low"].values * factor
-        hi  = d["ci_high"].values * factor
-        pvl = d["p"].values
-
-        y = y_base + offset
-
-        # CIs + caps
-        for j in range(m):
-            if np.isnan(lo[j]) or np.isnan(hi[j]):
-                continue
-            ax.hlines(y[j], lo[j], hi[j], lw=ci_line_width, color=color, zorder=2)
-            ax.plot([lo[j], lo[j]], [y[j] - cap_height, y[j] + cap_height], color=color, lw=ci_line_width, zorder=2)
-            ax.plot([hi[j], hi[j]], [y[j] - cap_height, y[j] + cap_height], color=color, lw=ci_line_width, zorder=2)
-
-        # points
-        ax.scatter(
-            eff, y,
-            s=point_size,
-            marker="o",
-            facecolor=color,
-            edgecolor=color,
-            linewidth=1,
-            zorder=4.5,
-        )
-
-        # p-values
+    for i, (df, label) in enumerate(zip(prepped_dfs, to_plot)):
+        d = df.reindex(outcomes)
+        color = colors[i % len(colors)]
+        y_coords = y_base + offsets[i]
+        for j in range(m_outcomes):
+            if pd.isna(d["lo"].iat[j]): continue
+            ax.hlines(y_coords[j], d["lo"].iat[j] * factor, d["hi"].iat[j] * factor, lw=ci_line_width, color=color, zorder=2)
+            for x_val in [d["lo"].iat[j], d["hi"].iat[j]]:
+                ax.vlines(x_val * factor, y_coords[j] - cap_height, y_coords[j] + cap_height, color=color, lw=ci_line_width, zorder=2)
+        ax.scatter(d["eff"] * factor, y_coords, s=point_size, color=color, zorder=4.5)
         if annotate_p:
-            for j in range(m):
-                if np.isnan(hi[j]) or np.isnan(pvl[j]):
-                    continue
-                ax.text(
-                    hi[j] + p_dx,
-                    y[j] - p_y_offset,
-                    f"p={pvl[j]:.3f}",
-                    ha="left",
-                    va="center",
-                    fontsize=p_fontsize,
-                    color=color,
-                    zorder=5,
-                    clip_on=False,
-                )
-
-        # legend handle
-        h = plt.Line2D(
-            [0], [0],
-            color=color,
-            lw=ci_line_width,
-            marker="o",
-            markeredgecolor=color,
-            markerfacecolor=color,
-            markersize=math.sqrt(point_size),
-            label=label,
-        )
-        handles.append(h)
-
-    # ---------- axis cosmetics ----------
-    ax.grid(False)
+            for j in range(m_outcomes):
+                if pd.isna(d["hi"].iat[j]) or pd.isna(d["p"].iat[j]): continue
+                ax.text(d["hi"].iat[j] * factor + 0.2, y_coords[j] - p_y_offset, 
+                        f"p={d['p'].iat[j]:.3f}", ha="left", va="center", 
+                        fontsize=p_fontsize, color=color, zorder=5)
+        display_name = exposure_labels.get(label, label)
+        handles.append(plt.Line2D([0], [0], color=color, lw=ci_line_width, marker="o", label=display_name))
     ax.set_xlabel(x_label, fontsize=14)
-
     ax.set_yticks(y_base)
     ax.set_yticklabels(ylabels, fontsize=12)
-    ax.tick_params(axis="x", labelsize=12)
-
-    ax.set_ylim(-outcome_gap, (m - 1) * outcome_gap + outcome_gap)
-    ax.set_xlim(-11, 11)
-
-    xmin2, xmax2 = ax.get_xlim()
-    xticks = ax.get_xticks()
-    ax.set_xticks(xticks)
-    ax.set_xticklabels([("" if (t < xmin2 or t > xmax2) else f"{t:g}") for t in xticks])
-
-    ax.invert_yaxis()
-
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+    ax.set_xlim(-15, 15)
+    ax.invert_yaxis() 
+    for s in ["top", "right"]: ax.spines[s].set_visible(False)
     ax.spines["left"].set_color("gray")
     ax.spines["bottom"].set_color("gray")
-
-    ax.legend(
-        handles=handles,
-        fontsize=12,
-        loc="lower center",
-        bbox_to_anchor=(0.5, 1.01),
-        ncol=1,
-        frameon=False,
-    )
-
+    ax.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 1.01), frameon=False)
     fig.tight_layout()
     return fig, ax
 
+
 def matching_plot_error_bars(
-    df,
+    df: pd.DataFrame,
     treated_title: str,
     dir: str,
-    experiment_id=None,
-    target_title: str = "Treatment",
+    experiment_id: str = None,
     alpha: float = 0.05,
     figsize=(8, 8),
-    out_dir=None,
+    out_dir: str = None,
     *,
-    labels_dict=None,
-    diet_short_names_mapping=None,
+    labels_dict: dict = None,
+    diet_short_names_mapping: dict = None,
     outcome_col: str = "outcome",
-    xlim=None,
+    xlim: list = None,
     show_annotations: bool = True,
     text_above_offset: float = 0.28,
 ):
-    """
-    Publication-ready forest plot for matching results (ATE + CI + BH-adjusted p).
-
-    Supports either absolute effects or percent effects.
-    """
-
-    df = df.copy()
-    labels_dict = {} if labels_dict is None else dict(labels_dict)
-    diet_short_names_mapping = {} if diet_short_names_mapping is None else dict(diet_short_names_mapping)
-
-    # ------------------------------------------------------------------
-    # Detect effect mode
-    # ------------------------------------------------------------------
-    has_pct = all(c in df.columns for c in ["ATE_pct", "CI_low_pct", "CI_high_pct", "p_value_pct"])
-    has_abs = all(c in df.columns for c in ["ATE", "CI_low", "CI_high", "p_value"])
-
-    if not (has_pct or has_abs):
-        raise KeyError(
-            "df must contain either "
-            "['ATE_pct','CI_low_pct','CI_high_pct','p_value_pct'] "
-            "or ['ATE','CI_low','CI_high','p_value']"
-        )
-
-    if has_pct:
-        eff_col, lo_col, hi_col, p_col = "ATE_pct", "CI_low_pct", "CI_high_pct", "p_value_pct"
-        x_label = "Effect (% difference vs matched controls)"
-        plot_mode = "pct"
-    else:
-        eff_col, lo_col, hi_col, p_col = "ATE", "CI_low", "CI_high", "p_value"
-        x_label = "Effect (absolute difference)"
-        plot_mode = "abs"
-
-    # ------------------------------------------------------------------
-    # Optional control mean (for cross-annotating abs <-> %)
-    # ------------------------------------------------------------------
-    control_mean_candidates = [
-        "control_mean", "mean_control", "matched_control_mean",
-        "control_mean_matched", "y0_mean", "outcome_mean_control",
-        "ref_control_mean",
-    ]
-    control_mean_col = next((c for c in control_mean_candidates if c in df.columns), None)
-
-    df["ATE_abs_for_annot"] = np.nan
-    df["Effect_pct_for_annot"] = np.nan
-
-    if plot_mode == "abs":
-        df["ATE_abs_for_annot"] = df["ATE"].astype(float)
-        if control_mean_col is not None:
-            denom = df[control_mean_col].astype(float)
-            with np.errstate(divide="ignore", invalid="ignore"):
-                df["Effect_pct_for_annot"] = 100.0 * df["ATE_abs_for_annot"] / denom
-    else:
-        df["Effect_pct_for_annot"] = df["ATE_pct"].astype(float)
-        if control_mean_col is not None:
-            denom = df[control_mean_col].astype(float)
-            df["ATE_abs_for_annot"] = (df["Effect_pct_for_annot"] / 100.0) * denom
-
-    # ------------------------------------------------------------------
-    # BH correction
-    # ------------------------------------------------------------------
-    raw_p = df[p_col].to_numpy(dtype=float)
-    adj_p = np.full_like(raw_p, np.nan, dtype=float)
-
-    ok = np.isfinite(raw_p)
-    if ok.any():
-        adj_p[ok] = multipletests(
-            raw_p[ok],
-            alpha=alpha,
-            method="fdr_bh",
-            is_sorted=False,
-        )[1]
-
-    df["p_value_adj_bh"] = adj_p
-    df["is_significant_bh"] = df["p_value_adj_bh"] < alpha
-
-    # ------------------------------------------------------------------
-    # Labels & ordering
-    # ------------------------------------------------------------------
-    outcomes_raw = df[outcome_col].astype(str).tolist()
-    outcomes_pretty = [labels_dict.get(o, o) for o in outcomes_raw]
-
-    m = len(outcomes_pretty)
-    y = np.arange(m)[::-1]
-
-    eff = df[eff_col].to_numpy(float)
-    lo = df[lo_col].to_numpy(float)
-    hi = df[hi_col].to_numpy(float)
-    p_adj = df["p_value_adj_bh"].to_numpy(float)
-    is_sig = df["is_significant_bh"].to_numpy(bool)
-
-    abs_ate = df["ATE_abs_for_annot"].to_numpy(float)
-    pct_eff = df["Effect_pct_for_annot"].to_numpy(float)
-
-    # ------------------------------------------------------------------
-    # Styling
-    # ------------------------------------------------------------------
-    c_sig = "#C62828"
-    c_nonsig = "#9E9E9E"
-    c_text = "#2b2b2b"
-
-    point_size = 42
-    ci_lw = 3.2
-    cap_h = 0.12
-
+    labels_dict = labels_dict or {}
+    mapping = diet_short_names_mapping or {}
+    is_pct_mode = "ATE_pct" in df.columns
+    cols = {
+        "eff": "ATE_pct" if is_pct_mode else "ATE",
+        "lo": "CI_low_pct" if is_pct_mode else "CI_low",
+        "hi": "CI_high_pct" if is_pct_mode else "CI_high",
+        "p": "p_value_pct" if is_pct_mode else "p_value"
+    }    
+    x_label = f"Effect ({'% difference vs matched controls' if is_pct_mode else 'absolute difference'})"
+    raw_p = df[cols["p"]].to_numpy(dtype=float)
+    adj_p = np.full_like(raw_p, np.nan)
+    mask = np.isfinite(raw_p)
+    if mask.any():
+        _, adj_p[mask], _, _ = multipletests(raw_p[mask], alpha=alpha, method="fdr_bh")
+    
+    is_sig = (adj_p < alpha) & np.isfinite(adj_p)
+    c_mean_col = df.columns[df.columns.str.contains('control_mean|mean_control|y0_mean')].tolist()
+    c_mean = df[c_mean_col[0]] if c_mean_col else None
+    outcomes = [labels_dict.get(str(o), o) for o in df[outcome_col]]
+    m = len(outcomes)
+    y_pos = np.arange(m)[::-1]
     fig, ax = plt.subplots(figsize=figsize)
+    ax.axvline(0, linestyle="--", lw=1.2, color="#7a7a7a", alpha=0.75, zorder=1)
+    ax.grid(axis="x", lw=0.6, alpha=0.25, zorder=0)
+    
+    for i in range(m):
+        eff_val = df[cols["eff"]].iat[i]
+        if not np.isfinite(eff_val): continue
+        color = "#C62828" if is_sig[i] else "#9E9E9E"
+        lo, hi = df[cols["lo"]].iat[i], df[cols["hi"]].iat[i]
+        if np.isfinite(lo) and np.isfinite(hi):
+            ax.hlines(y_pos[i], lo, hi, lw=3.2, color=color, zorder=2)
+            ax.vlines([lo, hi], y_pos[i]-0.12, y_pos[i]+0.12, color=color, lw=3.2, zorder=2)
+        ax.scatter(eff_val, y_pos[i], s=42, color="black", zorder=3)
+        if show_annotations and is_sig[i]:
+            p_txt = f"p<{0.001 if adj_p[i] < 0.001 else f'{adj_p[i]:.3f}'}"
 
-    ax.axvline(0, linestyle="--", lw=1.2, color="#7a7a7a", alpha=0.75)
-    ax.grid(axis="x", lw=0.6, alpha=0.25)
-    ax.set_axisbelow(True)
+            ate_val = eff_val if not is_pct_mode else (eff_val/100 * c_mean.iat[i] if c_mean is not None else np.nan)
+            pct_val = eff_val if is_pct_mode else (eff_val/c_mean.iat[i] * 100 if c_mean is not None else np.nan)
+            
+            annot_text = f"BH {p_txt} • ATE={ate_val:+.2g} • Δ={pct_val:+.1f}%"
+            ax.text((lo+hi)/2 if np.isfinite(lo) else eff_val, y_pos[i] + text_above_offset, 
+                    annot_text, ha="center", va="bottom", fontsize=10, color="#2b2b2b")
 
-    # ------------------------------------------------------------------
-    # Draw CI + points
-    # ------------------------------------------------------------------
-    for j in range(m):
-        if not np.isfinite(eff[j]):
-            continue
-
-        color = c_sig if is_sig[j] else c_nonsig
-
-        if np.isfinite(lo[j]) and np.isfinite(hi[j]):
-            ax.hlines(y[j], lo[j], hi[j], lw=ci_lw, color=color, capstyle="round")
-            ax.plot([lo[j], lo[j]], [y[j] - cap_h, y[j] + cap_h], lw=ci_lw, color=color)
-            ax.plot([hi[j], hi[j]], [y[j] - cap_h, y[j] + cap_h], lw=ci_lw, color=color)
-
-        ax.scatter(eff[j], y[j], s=point_size, color="black", zorder=3)
-
-    # ------------------------------------------------------------------
-    # Annotations (only significant)
-    # ------------------------------------------------------------------
-    def fmt_p(p):
-        if not np.isfinite(p):
-            return "BH p=NA"
-        if p < 0.001:
-            return "BH p<0.001"
-        return f"BH p={p:.3f}"
-
-    if show_annotations:
-        for j in range(m):
-            if not (np.isfinite(p_adj[j]) and p_adj[j] < alpha):
-                continue
-
-            x_text = (
-                0.5 * (lo[j] + hi[j])
-                if np.isfinite(lo[j]) and np.isfinite(hi[j])
-                else eff[j]
-            )
-
-            text = (
-                f"{fmt_p(p_adj[j])} • "
-                f"ATE={abs_ate[j]:+.2g} • "
-                f"Δ={pct_eff[j]:+.1f}%"
-            )
-
-            ax.text(
-                x_text,
-                y[j] + text_above_offset,
-                text,
-                ha="center",
-                va="bottom",
-                fontsize=10,
-                color=c_text,
-                clip_on=False,
-            )
-
-    # ------------------------------------------------------------------
-    # Axes cosmetics
-    # ------------------------------------------------------------------
-    exposure_title = diet_short_names_mapping.get(treated_title, treated_title)
-    ax.set_title(exposure_title, fontsize=14, pad=12)
+    ax.set_title(mapping.get(treated_title, treated_title), fontsize=14, pad=12)
     ax.set_xlabel(x_label, fontsize=12)
-
-    ax.set_yticks(y)
-    ax.set_yticklabels(outcomes_pretty, fontsize=11)
-
-    if xlim is not None:
-        ax.set_xlim(*xlim)
-
-    ax.set_ylim(-0.5, m - 0.5)
-
-    for spine in ["top", "right"]:
-        ax.spines[spine].set_visible(False)
-
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(outcomes, fontsize=11)
+    if xlim: ax.set_xlim(*xlim)
+    
+    for s in ["top", "right"]: ax.spines[s].set_visible(False)
     plt.tight_layout()
 
-    # ------------------------------------------------------------------
-    # Save
-    # ------------------------------------------------------------------
-    final_out_dir = Path(out_dir) if out_dir is not None else Path(dir)
-    final_out_dir.mkdir(parents=True, exist_ok=True)
-
-    prefix = "" if experiment_id is None else f"{experiment_id}_"
-    out_path = final_out_dir / f"{prefix}{treated_title}.png"
-
-    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    save_dir = Path(out_dir or dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    fname = f"{f'{experiment_id}_' if experiment_id else ''}{treated_title}.png"
+    save_path = save_dir / fname
+    
+    fig.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
-
-    return out_path
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from typing import Dict
-from statsmodels.stats.multitest import multipletests
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from typing import Dict
-from statsmodels.stats.multitest import multipletests
+    return save_path
 
 
 def plot_combined_matching_ipw_results(
@@ -1220,187 +581,73 @@ def plot_combined_matching_ipw_results(
     point_size: float = 60.0,
     ci_line_width: float = 4.0,
     cap_height: float = 0.15,
-):
-    """
-    Combined forest plot comparing Matching vs IPW results.
+) -> Tuple[plt.Figure, plt.Axes]:
 
-    - Uses BH (FDR) correction
-    - FDR applied separately per method
-    - Matching and IPW non-significant results use different gray shades
-    """
-
-    # ------------------------------------------------------------------
-    # Load data
-    # ------------------------------------------------------------------
-    path_matching = f"results_matching/dataframes/{feature}_results.csv"
-    path_ipw = f"results/dataframes/{feature}_ate.csv"
-
-    df_matching_raw = pd.read_csv(path_matching)
-    df_ipw_raw = pd.read_csv(path_ipw)
-
-    target_outcomes = list(labels_dict.keys())
-
-    # ------------------------------------------------------------------
-    # Prep helpers
-    # ------------------------------------------------------------------
-    def prep_df(df, col_map):
-        d = df[df["outcome"].isin(target_outcomes)].copy()
-        d = d.rename(columns=col_map)
-        return d.set_index("outcome")
+    def load_and_prep(path: str, col_map: dict) -> pd.DataFrame:
+        df = pd.read_csv(path)
+        d = df[df["outcome"].isin(labels_dict.keys())].copy()
+        d = d.rename(columns=col_map).set_index("outcome")
+        p_vals = d["p"].to_numpy(dtype=float)
+        mask = np.isfinite(p_vals)
+        if mask.any():
+            _, adj_p, _, _ = multipletests(p_vals[mask], alpha=sig_thresh, method="fdr_bh")
+            d.loc[mask, "is_sig"] = adj_p < sig_thresh
+        else:
+            d["is_sig"] = False
+        return d
 
     map_matching = {
-        "ATE_pct": "effect",
-        "CI_low_pct": "ci_low",
-        "CI_high_pct": "ci_high",
-        "p_value_pct_fdr_bh": "p",
-        "ATE": "ate_abs",
+        "ATE_pct": "effect", "CI_low_pct": "ci_low", "CI_high_pct": "ci_high",
+        "p_value_pct_fdr_bh": "p", "ATE": "ate_abs"
     }
-
     map_ipw = {
-        "ATE_pct_point": "effect",
-        "CI_pct_2.5": "ci_low",
-        "CI_pct_97.5": "ci_high",
-        "p_value_boot_abs": "p",
-        "ATE_abs_point": "ate_abs",
+        "ATE_pct_point": "effect", "CI_pct_2.5": "ci_low", "CI_pct_97.5": "ci_high",
+        "p_value_boot_abs": "p", "ATE_abs_point": "ate_abs"
     }
-
-    df_m = prep_df(df_matching_raw, map_matching)
-    df_i = prep_df(df_ipw_raw, map_ipw)
-
-    # ------------------------------------------------------------------
-    # BH correction (separately per method)
-    # ------------------------------------------------------------------
-    def apply_bh(df):
-        p = df["p"].to_numpy(dtype=float)
-        adj = np.full_like(p, np.nan)
-
-        ok = np.isfinite(p)
-        if ok.any():
-            adj[ok] = multipletests(
-                p[ok],
-                alpha=sig_thresh,
-                method="fdr_bh",
-                is_sorted=False,
-            )[1]
-
-        df["p_adj_bh"] = adj
-        df["is_sig"] = df["p_adj_bh"] < sig_thresh
-        return df
-
-    df_m = apply_bh(df_m)
-    df_i = apply_bh(df_i)
-
-    # ------------------------------------------------------------------
-    # Plot setup
-    # ------------------------------------------------------------------
-    outcomes = target_outcomes
-    ylabels = [labels_dict[o] for o in outcomes]
-    feature_title = diet_full_names_mapping.get(feature, feature).replace("\n", " ")
-
-    m = len(outcomes)
-    outcome_gap = 3.5
-    y_base = np.arange(m) * outcome_gap
-    offsets = [-0.5, 0.5]
-
-    # Colors
-    matching_color = "#ab001a"
-    ipw_color = "#ff5c75"
-    matching_gray = "#454545"   # darker gray
-    ipw_gray = "#8a8a8a"        # lighter gray
-
+    df_m = load_and_prep(f"results_matching/dataframes/{feature}_results.csv", map_matching)
+    df_i = load_and_prep(f"results/dataframes/{feature}_ate.csv", map_ipw)
+    outcomes = list(labels_dict.keys())
+    m_count = len(outcomes)
+    y_base = np.arange(m_count) * 3.5 
     methods = [
-        ("Matching", df_m, matching_color, matching_gray),
-        ("IPW", df_i, ipw_color, ipw_gray),
+        ("Matching", df_m, "#ab001a", "#454545", -0.5), # Name, Data, SigColor, NonSigColor, Offset
+        ("IPW",      df_i, "#ff5c75", "#8a8a8a",  0.5)
     ]
-
     fig, ax = plt.subplots(figsize=figsize_per_panel)
-    ax.axvline(0.0, linestyle="--", linewidth=1.5, color="#8a8a8a", alpha=0.8)
+    ax.axvline(0.0, linestyle="--", lw=1.5, color="#8a8a8a", alpha=0.8, zorder=1)
 
-    # ------------------------------------------------------------------
-    # Draw
-    # ------------------------------------------------------------------
-    for idx, (method_name, data, sig_color, nonsig_color) in enumerate(methods):
+    for name, data, sig_color, nonsig_color, offset in methods:
         d = data.reindex(outcomes)
-        y = y_base + offsets[idx]
+        y_coords = y_base + offset
 
-        eff = d["effect"].values
-        lo = d["ci_low"].values
-        hi = d["ci_high"].values
-        abs_vals = d["ate_abs"].values
-        is_sig = d["is_sig"].values
+        for j in range(m_count):
+            eff, lo, hi = d["effect"].iat[j], d["ci_low"].iat[j], d["ci_high"].iat[j]
+            if pd.isna(eff): continue
 
-        for j in range(m):
-            if not np.isfinite(eff[j]):
-                continue
+            color = sig_color if d["is_sig"].iat[j] else nonsig_color
+            ax.hlines(y_coords[j], lo, hi, lw=ci_line_width, color=color, zorder=2)
+            ax.vlines([lo, hi], y_coords[j] - cap_height, y_coords[j] + cap_height, lw=ci_line_width, color=color, zorder=2)
+            ax.scatter(eff, y_coords[j], s=point_size, color="black", edgecolors="white", zorder=3)
 
-            color = sig_color if is_sig[j] else nonsig_color
-
-            # CI
-            ax.hlines(y[j], lo[j], hi[j], lw=ci_line_width, color=color, zorder=2)
-            ax.plot([lo[j], lo[j]], [y[j] - cap_height, y[j] + cap_height],
-                    lw=ci_line_width, color=color)
-            ax.plot([hi[j], hi[j]], [y[j] - cap_height, y[j] + cap_height],
-                    lw=ci_line_width, color=color)
-
-            # Point
-            ax.scatter(
-                eff[j], y[j],
-                s=point_size,
-                color="black",
-                edgecolors="white",
-                zorder=3,
-            )
-
-            # Annotation (only BH-significant)
-            if is_sig[j]:
+            if d["is_sig"].iat[j]:
                 unit = annotation_dict.get(outcomes[j], "")
-                unit_str = f" {unit}" if unit else ""
-                sign = "+" if abs_vals[j] > 0 else ""
-                txt = f"{sign}{abs_vals[j]:.1f}{unit_str} ({eff[j]:+.1f}%)"
+                abs_val = d["ate_abs"].iat[j]
+                txt = f"{abs_val:+.1f}{f' {unit}' if unit else ''} ({eff:+.1f}%)"
+                ax.text(14, y_coords[j], txt, ha="left", va="center", 
+                        fontsize=14, fontweight="bold", color=color)
 
-                ax.text(
-                    14, y[j],
-                    txt,
-                    ha="left",
-                    va="center",
-                    fontsize=14,
-                    fontweight="bold",
-                    color=color,
-                )
-
-    # ------------------------------------------------------------------
-    # Final styling
-    # ------------------------------------------------------------------
+    title = diet_full_names_mapping.get(feature, feature).replace("\n", " ")
+    ax.set_title(title, fontsize=14, pad=60)
     ax.set_yticks(y_base)
-    ax.set_yticklabels(ylabels, fontsize=14)
+    ax.set_yticklabels([labels_dict[o] for o in outcomes], fontsize=14)
     ax.set_xlim(-25, 25)
-    ax.invert_yaxis()
-
-    ax.set_xlabel("Effect (% point difference)", fontsize=14)
-    ax.set_title(feature_title, fontsize=14, pad=60)
-    ax.tick_params(axis="both", labelsize=14)
-
-    handles = [
-        plt.Line2D([0], [0], color=matching_color, lw=3, label="Matching (BH significant)"),
-        plt.Line2D([0], [0], color=matching_gray, lw=3, label="Matching (BH non-significant)"),
-        plt.Line2D([0], [0], color=ipw_color, lw=3, label="IPW (BH significant)"),
-        plt.Line2D([0], [0], color=ipw_gray, lw=3, label="IPW (BH non-significant)"),
-    ]
-
-    ax.legend(
-        handles=handles,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.15),
-        ncol=2,
-        frameon=False,
-        fontsize=13,
-    )
-
-    for spine in ["top", "right"]:
-        ax.spines[spine].set_visible(False)
-
+    ax.invert_yaxis()    
+    handles = [plt.Line2D([0], [0], color=c, lw=3, label=f"{n} ({s})") for n, _, sc, nsc, _ in methods for c, s in [(sc, "BH significant"), (nsc, "BH non-significant")]]
+    ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 1.15), ncol=2, frameon=False, fontsize=13)
+    for s in ["top", "right"]: ax.spines[s].set_visible(False)
     plt.tight_layout()
     return fig, ax
+
 
 def plot_error_bars(
     df_bootstrap: pd.DataFrame,
@@ -1411,106 +658,49 @@ def plot_error_bars(
     alpha: float = 0.05,
 ) -> Path:
     raw_pvals = df_bootstrap["p_value_boot_abs"].to_numpy()
-    adj_pvals = multipletests(
-        raw_pvals,
-        alpha=0.05,
-        method="fdr_bh",
-        maxiter=1,
-        is_sorted=False,
-        returnsorted=False,
-    )[1]
-    df_bootstrap["p_value_adj_bh"] = adj_pvals
-    df_bootstrap["is_significant_bh"] = df_bootstrap["p_value_adj_bh"] < alpha
-    x_label = "Effect (% point difference)"
-    point_size: float = 32.0
-    ci_line_width: float = 5.0
-    cap_height: float = 0.09
-    p_fontsize: int = 9
-    p_y_offset: float = 0.12
-    zero_line = True
-    def _color_for_sig(is_sig: bool) -> str:
-        return "#E31A1C" if is_sig else "#9E9E9E"
-    outcomes = df_bootstrap["outcome"].tolist()
+    _, adj_pvals, _, _ = multipletests(raw_pvals, alpha=alpha, method="fdr_bh")    
+    df = df_bootstrap.assign(
+        p_adj=adj_pvals,
+        is_sig=adj_pvals < alpha
+    )
+    outcomes = df["outcome"].tolist()
     m = len(outcomes)
-    y = np.arange(m)
+    y_pos = np.arange(m)
     fig, ax = plt.subplots(figsize=(10, 8))
-    if zero_line:
-        ax.axvline(
-            0.0,
-            linestyle="--",
-            linewidth=1.25,
-            color="#8a8a8a",
-            alpha=0.85,
-            zorder=0,
-        )
-    ax.grid(False)
-    eff = df_bootstrap["ATE_pct_point"].to_numpy()
-    lo = df_bootstrap["CI_pct_2.5"].to_numpy()
-    hi = df_bootstrap["CI_pct_97.5"].to_numpy()
-    p_raw = df_bootstrap["p_value_boot_abs"].to_numpy()
-    p_adj = df_bootstrap["p_value_adj_bh"].to_numpy()
-    is_sig = df_bootstrap["is_significant_bh"].to_numpy(dtype=bool)
-    for j in range(m):
-        if np.isnan(lo[j]) or np.isnan(hi[j]) or np.isnan(eff[j]):
-            continue
-        c = _color_for_sig(bool(is_sig[j]))
-        ax.hlines(y[j], lo[j], hi[j], lw=ci_line_width, color=c, zorder=2)
-        ax.plot([lo[j], lo[j]], [y[j] - cap_height, y[j] + cap_height], color=c, lw=ci_line_width, zorder=2)
-        ax.plot([hi[j], hi[j]], [y[j] - cap_height, y[j] + cap_height], color=c, lw=ci_line_width, zorder=2)
-    ax.scatter(eff, y, s=point_size, color="black", zorder=3)
-    for j in range(m):
-        if np.isnan(eff[j]) or np.isnan(p_raw[j]) or np.isnan(p_adj[j]):
-            continue
-        if p_raw[j] < 0.001:
-            p_text = "p < 0.001"
-        else:
-            p_text = f"p={p_adj[j]:.3f}"
-        if bool(is_sig[j]):
-            effect_text = f"{eff[j]:+.1f}%"
-            label = f"{p_text}, Δ = {effect_text}"
-        else:
-            label = p_text
-        ax.text(
-            eff[j],
-            y[j] - p_y_offset,
-            label,
-            ha="center",
-            va="bottom",
-            fontsize=p_fontsize,
-            color="#333",
-            zorder=4,
-            clip_on=False,
-        )
-    title_new = treated_title
-    ax.set_title(f"Effect of {title_new}", fontsize=14, pad=10)
-    ax.set_xlabel(x_label, fontsize=12)
-    ax.set_yticks(y)
-    outcomes_labeled = [' '.join(s.split('_target_day')[0].split('_')).capitalize() for s in outcomes]
-    ax.set_yticklabels(outcomes_labeled, fontsize=12)
-    ax.set_ylim(-0.5, m - 1 + 0.5)
-    ax.margins(y=0.02)
+    ax.axvline(0, linestyle="--", lw=1.25, color="#8a8a8a", alpha=0.85, zorder=0)
+    eff = df["ATE_pct_point"].to_numpy()
+    lo, hi = df["CI_pct_2.5"].to_numpy(), df["CI_pct_97.5"].to_numpy()
+    is_sig = df["is_sig"].to_numpy()
+    for i in range(m):
+        if pd.isna([eff[i], lo[i], hi[i]]).any():
+            continue            
+        color = "#E31A1C" if is_sig[i] else "#9E9E9E"
+        ax.hlines(y_pos[i], lo[i], hi[i], lw=5.0, color=color, zorder=2)
+        ax.vlines([lo[i], hi[i]], y_pos[i] - 0.09, y_pos[i] + 0.09, color=color, lw=5.0, zorder=2)
+        p_text = "p < 0.001" if df["p_adj"].iat[i] < 0.001 else f"p={df['p_adj'].iat[i]:.3f}"
+        label = f"{p_text}, Δ = {eff[i]:+.1f}%" if is_sig[i] else p_text
+        ax.text(eff[i], y_pos[i] - 0.12, label, ha="center", va="bottom", 
+                fontsize=9, color="#333", zorder=4)
+
+    ax.scatter(eff, y_pos, s=32.0, color="black", zorder=3)
+    ax.set_title(f"Effect of {treated_title}", fontsize=14, pad=10)
+    ax.set_xlabel("Effect (% point difference)", fontsize=12)
+    labels = [o.split('_target_day')[0].replace('_', ' ').capitalize() for o in outcomes]
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(labels, fontsize=12)
     ax.set_xlim(-21, 21)
-    xmin, xmax = ax.get_xlim()
-    xticks = ax.get_xticks()
-    xticklabels = []
-    for t in xticks:
-        if t < xmin or t > xmax:
-            xticklabels.append("")
-        else:
-            xticklabels.append(f"{t:g}")
-    ax.set_xticks(xticks)
-    ax.set_xticklabels(xticklabels)
+    ax.set_ylim(-0.5, m - 0.5)
     ax.invert_yaxis()
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+    
+    for s in ["top", "right"]: ax.spines[s].set_visible(False)
     ax.spines["left"].set_color("gray")
     ax.spines["bottom"].set_color("gray")
-    fig.tight_layout()
     out_dir = Path(dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    prefix = "" if experiment_id is None else f"{experiment_id}_"
+    prefix = f"{experiment_id}_" if experiment_id is not None else ""
     safe_title = str(treated_title).replace(os.sep, "_")
     out_path = out_dir / f"{prefix}{safe_title}.png"
+    fig.tight_layout()
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
     return out_path

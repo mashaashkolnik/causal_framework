@@ -4,6 +4,7 @@ from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
+from statsmodels.stats.multitest import multipletests
 
 
 def compute_overlap_and_trim(
@@ -194,4 +195,20 @@ def bootstrap_ipw(
             }
         )
     ate_df = pd.DataFrame(rows).sort_values("outcome").reset_index(drop=True)
+    p_raw = ate_df["p_value_boot_abs"].to_numpy()
+    mask = np.isfinite(p_raw)
+    if mask.any():
+        adj_results = multipletests(
+            p_raw[mask],
+            alpha=alpha,
+            method="fdr_bh",
+            is_sorted=False,
+            returnsorted=False,
+        )
+        p_adj = np.full(len(ate_df), np.nan)
+        sig_adj = np.full(len(ate_df), False)
+        p_adj[mask] = adj_results[1]
+        sig_adj[mask] = adj_results[0]    
+        ate_df["pvalue_fdr_bh"] = p_adj
+        ate_df["fdr_bh_significant"] = sig_adj
     return balance_after, ate_df
