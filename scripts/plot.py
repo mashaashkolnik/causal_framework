@@ -908,3 +908,21 @@ def plot_error_bars(
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
     return out_path
+
+
+def highlight_smd_rows(row):
+    styles = [''] * len(row)
+    max_smd = row["max_abs_SMD_post"]
+    mean_smd = row["mean_abs_SMD_post"]
+    fail_count = row["asmd_fail_count"]
+    if max_smd > 0.15:
+        styles[row.index.get_loc("max_abs_SMD_post")] = 'background-color: #ffb8d3'
+    if mean_smd >= 0.1:
+        styles[row.index.get_loc("mean_abs_SMD_post")] = 'background-color: #ffb8d3'
+    if fail_count > 4:
+        styles[row.index.get_loc("asmd_fail_count")] = 'background-color: #ffb8d3'
+    if (fail_count <= 3 and 
+        mean_smd < 0.1 and 
+        max_smd <= 0.15):
+        styles[row.index.get_loc("exposure_baseline")] = 'background-color: #c8e6c9'   
+    return styles
