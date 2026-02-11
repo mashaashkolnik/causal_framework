@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from statsmodels.stats.multitest import multipletests
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
@@ -309,7 +310,7 @@ def heatmap_effects_generic(
 
     is_sig = (pval_df < sig_thresh) & pval_df.notna() & effect_df.notna()
     annot = effect_df.copy().astype(object)
-    annot = effect_df.applymap(
+    annot = effect_df.map(
         lambda v: effect_format.format(v) if not pd.isna(v) else ""
     )
     annot = annot.where(is_sig, "")
@@ -642,7 +643,14 @@ def matching_plot_error_bars(
     }
     x_label = f"Effect ({'% difference vs matched controls' if is_pct_mode else 'absolute difference'})"
     raw_p = df[cols["p"]].to_numpy(dtype=float)
-    adj_p = np.full_like(raw_p, np.nan)
+    fdr_col = f"{cols['p']}_fdr_bh"
+    if fdr_col in df.columns:
+        adj_p = df[fdr_col].to_numpy(dtype=float)
+    else:
+        finite_mask = np.isfinite(raw_p)
+        adj_p = np.full_like(raw_p, np.nan)
+        if finite_mask.any():
+            adj_p[finite_mask] = multipletests(raw_p[finite_mask], method="fdr_bh")[1]
     is_sig = (adj_p < alpha) & np.isfinite(adj_p)
     c_mean_col = df.columns[
         df.columns.str.contains("control_mean|mean_control|y0_mean")
