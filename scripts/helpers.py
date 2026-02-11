@@ -184,7 +184,6 @@ def run_experiment(
             df_bootstrap,
             treated_title=exposure_name,
             experiment_id=None,
-            target_title="Treatment",
             dir=result_plot_folder_path,
         )
         Path(df_folder_path).mkdir(parents=True, exist_ok=True)
@@ -225,7 +224,6 @@ def run_experiment(
                 df_bootstrap,
                 treated_title=exposure_name,
                 experiment_id=exp_id,
-                target_title="Treatment",
                 dir=errorbar_folder_path,
             )
         else:

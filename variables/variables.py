@@ -64,12 +64,22 @@ partial_confounders = ["total_energy_kcal", "sleep_hour"]
 # ================================================================
 # Load features
 # ================================================================
-with open(FEATURES_PATH) as f:
-    features = json.load(f)
-
-numerical = features["numerical"]
-categorical = features["categorical"]
 target = "is_treated"
+
+try:
+    with open(FEATURES_PATH) as f:
+        features = json.load(f)
+    numerical = features["numerical"]
+    categorical = features["categorical"]
+except FileNotFoundError:
+    import warnings
+    warnings.warn(
+        f"Features file not found at {FEATURES_PATH}. "
+        "numerical/categorical/variable_config will be empty.",
+        stacklevel=1,
+    )
+    numerical: list[str] = []
+    categorical: list[str] = []
 
 variable_config = {
     "sleep_targets": sleep_targets,

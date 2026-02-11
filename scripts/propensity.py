@@ -68,6 +68,7 @@ def assign_treatment_values(
     limit=None,
     kwargs: Optional[Dict[str, Any]] = None,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    df = df.copy()
     exposure_baseline = exposure.split("_target_day")[0]
     low, high = np.min(df[exposure]), np.max(df[exposure])
     baseline_median = df[exposure].median()
@@ -116,7 +117,7 @@ def create_pool(
     pd.DataFrame,
     pd.Series,
 ]:
-    X = df[numerical + categorical]
+    X = df[numerical + categorical].copy()
     y = df[target]
     for col in categorical:
         X[col] = X[col].astype(str)
@@ -170,6 +171,7 @@ def calculate_propensity_scores(
     categorical: Sequence[str],
     cb: CatBoostClassifier,
 ) -> pd.DataFrame:
+    X = X.copy()
     X["treated"] = y.astype(int)
     propensity_scores = cb.predict_proba(X[numerical + categorical])
     propensity_scores = [score[1] for score in propensity_scores]
