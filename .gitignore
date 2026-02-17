@@ -219,8 +219,9 @@ charts*
 results*
 experiment*
 variables*
+archive*
 mock_data_generation.ipynb
 
 # system files
 .DS_Store
-archive/
+g
