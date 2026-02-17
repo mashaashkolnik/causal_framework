@@ -876,8 +876,9 @@ def plot_error_bars(
             lw=5.0,
             zorder=2,
         )
+        #print(df.columns)
         p_text = (
-            "p < 0.001" if df["p_adj"].iat[i] < 0.001 else f"p={df['p_adj'].iat[i]:.3f}"
+            "p < 0.001" if df["pvalue_fdr_bh"].iat[i] < 0.001 else f"p={df['pvalue_fdr_bh'].iat[i]:.3f}"
         )
         label = f"{p_text}, Δ = {eff[i]:+.1f}%" if is_sig[i] else p_text
         ax.text(

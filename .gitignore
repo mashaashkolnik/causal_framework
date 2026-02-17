@@ -216,11 +216,11 @@ catboost*/
 # ignore data folder
 data*
 charts*
-
-# ignore experiment outputs folder
-experiment/
+results*
+experiment*
+variables*
+mock_data_generation.ipynb
 
 # system files
 .DS_Store
-results/
 archive/
