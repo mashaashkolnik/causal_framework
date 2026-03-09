@@ -19,6 +19,8 @@ plant_based_whole_foods_categories_energy,526.04 ± 405.43,558.76 ± 437.06,495.
 whole_dairy_categories_energy,141.85 ± 188.41,138.49 ± 191.21,145.02 ± 185.69
 processed_categories_energy,367.15 ± 367.19,424.52 ± 407.95,312.83 ± 314.48
 total_energy_kcal,1815.23 ± 703.34,1996.75 ± 730.86,1643.37 ± 629.89
+plant_based_whole_foods_ratio,0.30 ± 0.20,0.28 ± 0.20,0.31 ± 0.21
+whole_dairy_categories_ratio,0.08 ± 0.10,0.07 ± 0.09,0.09 ± 0.10
 whole_food_categories_ratio,0.55 ± 0.22,0.54 ± 0.22,0.56 ± 0.22
 processed_categories_ratio,0.20 ± 0.17,0.21 ± 0.18,0.19 ± 0.17
 prot_pct,0.18 ± 0.06,0.18 ± 0.07,0.17 ± 0.06
