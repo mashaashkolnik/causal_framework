@@ -221,6 +221,7 @@ experiment*
 variables/
 archive*
 mock_data_generation.ipynb
+results_aggregation.ipynb
 
 # system files
 .DS_Store

@@ -124,8 +124,6 @@ EXPOSURES = {
     "whole_food_categories_ratio_target_day": {"cutoff": None, "method": "median"},
     "whole_dairy_categories_ratio_target_day": {"cutoff": None, "method": "median"},
     "processed_categories_ratio_target_day": {"cutoff": None, "method": "median"},
-    # ---------------- SATURATED FAT & FIBER ----------------
-    "fiber_density_energy_target_day": {"cutoff": None, "method": "median"},
     # ---------------- MACROS ----------------
     "prot_pct_target_day": {"cutoff": None, "method": "median"},
     "fat_pct_target_day": {"cutoff": None, "method": "median"},
