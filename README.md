@@ -1,9 +1,9 @@
 # Day-to-day dietary variation shapes overnight sleep physiology  
-## A target-trial emulation in ~4.8 thousand person-nights
+## A a causal inference study in ~4.8 thousand person-nights
 
 This repository contains all analysis code used to produce the results, figures, and robustness checks for the manuscript:
 
-**[Day-to-day dietary variation shapes overnight sleep physiology: a target-trial emulation in 4.8 thousand person-nights](https://www.medrxiv.org/content/10.64898/2026.02.17.26346471v1)**
+**Day-to-day dietary variation shapes overnight sleep physiology: a target-trial emulation in 4.8 thousand person-nights**
 
 ---
 
